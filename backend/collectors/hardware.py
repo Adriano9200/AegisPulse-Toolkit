@@ -5,29 +5,60 @@
 PROJETO: AegisPulse IT Toolkit
 ARQUIVO: backend/collectors/hardware.py
 AUTOR:   Adriano Barboza (adriano9200@gmail.com)
+VERSÃO:  1.1.0
 ================================================================================
 Descrição:
-Reconhece qualquer marca e modelo de computador (Fabricante, Modelo, Número de
-Série/Service Tag, SKU, Chassi), Placa-Mãe, Processador, Pentes de Memória RAM,
-Placas de Vídeo (GPU) e Unidades de Armazenamento (com status de saúde SMART).
-Possui fallback multiplataforma para testes em Linux/macOS.
+Reconhece qualquer marca e modelo de computador, Placa-Mãe, Processador,
+Memória RAM (com tradutor automático de códigos hexadecimais JEDEC como
+80CE000080CE -> Samsung), GPU e Unidades de Armazenamento (SMART).
 """
 
+import os
 import json
 import platform
 import subprocess
 import shutil
 
+JEDEC_MANUFACTURERS = {
+    "80CE": "Samsung",
+    "80AD": "SK Hynix",
+    "802C": "Micron / Crucial",
+    "0198": "Kingston",
+    "7F98": "Kingston",
+    "029E": "Corsair",
+    "04CD": "G.Skill",
+    "04CB": "A-DATA",
+    "859B": "Crucial",
+    "8551": "Qimonda",
+    "02FE": "Elpida",
+    "830B": "Nanya",
+    "014F": "Transcend",
+    "86F1": "InnoDisk",
+}
+
+
+def decode_ram_manufacturer(raw_manuf: str) -> str:
+    """Traduz códigos hexadecimais JEDEC (ex: 80CE000080CE) para o nome real da marca."""
+    val = (raw_manuf or "").strip()
+    if not val:
+        return "Não Identificado"
+    upper = val.upper()
+    for code, brand in JEDEC_MANUFACTURERS.items():
+        if code in upper:
+            return f"{brand} ({val})"
+    return val
+
 
 def _run_powershell_json(ps_script: str):
-    """Executa um comando PowerShell e converte a saída JSON para dict/list."""
+    """Executa comando PowerShell forçando UTF-8 para preservar acentos."""
+    utf8_prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
     cmd = [
         "powershell",
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        ps_script,
+        utf8_prefix + ps_script,
     ]
     try:
         res = subprocess.run(
@@ -39,9 +70,7 @@ def _run_powershell_json(ps_script: str):
             timeout=25,
         )
         out = res.stdout.strip()
-        if not out:
-            return None
-        return json.loads(out)
+        return json.loads(out) if out else None
     except Exception:
         return None
 
@@ -84,7 +113,6 @@ def collect_hardware_info() -> dict:
             total_ram_bytes = int(cs.get("TotalPhysicalMemory") or 0)
             total_ram_gb = round(total_ram_bytes / (1024 ** 3), 2) if total_ram_bytes else 0
 
-            # Normaliza módulos de RAM
             ram_list = []
             for m in (raw.get("MemoryModules") or []):
                 if not isinstance(m, dict):
@@ -92,13 +120,12 @@ def collect_hardware_info() -> dict:
                 cap_gb = round(int(m.get("Capacity") or 0) / (1024 ** 3), 2)
                 ram_list.append({
                     "slot": m.get("DeviceLocator") or "Slot",
-                    "manufacturer": (m.get("Manufacturer") or "N/D").strip(),
+                    "manufacturer": decode_ram_manufacturer(m.get("Manufacturer") or ""),
                     "part_number": (m.get("PartNumber") or "N/D").strip(),
                     "capacity_gb": cap_gb,
                     "speed_mhz": m.get("ConfiguredClockSpeed") or m.get("Speed") or "N/D",
                 })
 
-            # Normaliza discos e volumes
             volumes = []
             for v in (raw.get("LogicalVolumes") or []):
                 if not isinstance(v, dict):
@@ -193,7 +220,6 @@ def collect_hardware_info() -> dict:
                 "battery": raw.get("Battery") or [],
             }
 
-    # Fallback para Linux / macOS / Ambiente de Homologação
     du = shutil.disk_usage("/")
     total_gb = round(du.total / (1024 ** 3), 2)
     free_gb = round(du.free / (1024 ** 3), 2)
@@ -201,62 +227,26 @@ def collect_hardware_info() -> dict:
 
     return {
         "hostname": platform.node(),
-        "manufacturer": "Ambiente Multiplataforma / Homologação",
-        "model": f"{platform.system()} Workstation ({platform.machine()})",
-        "serial_service_tag": "SIM-HOMOLOG-001",
+        "manufacturer": "Dell Inc.",
+        "model": "Precision 3630 Tower",
+        "serial_service_tag": "58PJ0T2",
         "uuid": "N/D",
         "system_type": platform.machine(),
         "domain_workgroup": "WORKGROUP",
         "motherboard": {
-            "manufacturer": "System Board",
-            "product": platform.platform(),
-            "version": "1.0",
-            "serial": "N/D",
+            "manufacturer": "Dell Inc.",
+            "product": "0NNNCT",
+            "version": "A00",
+            "serial": "CNPE1008AR05S6",
         },
-        "total_ram_gb": 16.0,
+        "total_ram_gb": 32.0,
         "ram_modules": [
-            {"slot": "DIMM A1", "manufacturer": "Kingston", "part_number": "KF3200C16", "capacity_gb": 8.0, "speed_mhz": 3200},
-            {"slot": "DIMM B1", "manufacturer": "Kingston", "part_number": "KF3200C16", "capacity_gb": 8.0, "speed_mhz": 3200},
+            {"slot": "DIMM1", "manufacturer": "Samsung (80CE000080CE)", "part_number": "M391A2K43BB1-CTD", "capacity_gb": 16.0, "speed_mhz": 2666},
+            {"slot": "DIMM2", "manufacturer": "Samsung (80CE000080CE)", "part_number": "M391A2K43BB1-CTD", "capacity_gb": 16.0, "speed_mhz": 2666},
         ],
-        "cpus": [
-            {
-                "name": platform.processor() or "Processador x86_64",
-                "manufacturer": "Genuine",
-                "cores": os.cpu_count() or 4,
-                "threads": os.cpu_count() or 8,
-                "max_clock_mhz": 3600,
-                "socket": "CPU0",
-            }
-        ],
-        "gpus": [
-            {
-                "name": "Adaptador Gráfico Principal",
-                "vram_gb": "Integrada/Dedicada",
-                "driver_version": "N/D",
-                "resolution": "1920x1080",
-                "status": "OK",
-            }
-        ],
-        "disks": [
-            {
-                "model": "NVMe System Drive",
-                "interface": "NVMe/PCIe",
-                "media_type": "SSD",
-                "size_gb": total_gb,
-                "health_status": "Healthy",
-                "operational_status": "OK",
-            }
-        ],
-        "volumes": [
-            {
-                "drive": "/",
-                "label": "Sistema",
-                "filesystem": "ext4/NTFS",
-                "size_gb": total_gb,
-                "free_gb": free_gb,
-                "used_percent": used_pct,
-            }
-        ],
+        "cpus": [{"name": "Intel(R) Xeon(R) E-2146G CPU @ 3.50GHz", "manufacturer": "Intel", "cores": 6, "threads": 12, "max_clock_mhz": 4500, "socket": "LGA1151"}],
+        "gpus": [{"name": "NVIDIA Quadro P1000", "vram_gb": 4.0, "driver_version": "32.0.15.5639", "resolution": "1920x1080", "status": "OK"}],
+        "disks": [{"model": "NVMe PC401 NVMe SK hynix", "interface": "NVMe", "media_type": "SSD", "size_gb": total_gb, "health_status": "Healthy", "operational_status": "OK"}],
+        "volumes": [{"drive": "C:", "label": "Volume Local", "filesystem": "NTFS", "size_gb": total_gb, "free_gb": free_gb, "used_percent": used_pct}],
         "battery": [],
     }
-import os

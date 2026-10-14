@@ -1,18 +1,40 @@
-﻿*.gdoc
+# ==============================================================================
+# AegisPulse IT Toolkit - .gitignore
+# Autor: Adriano Barboza (adriano9200@gmail.com)
+# ==============================================================================
+
+# Atalhos virtuais do Google Drive (causam erro de leitura no Git se nao ignorados)
+*.gdoc
 *.gsheet
 *.gslides
 *.gdrive
+
+# Pacotes ZIP de backup
 *.zip
+
+# Configuracoes sensiveis locais (Chave do Operador e API Key do Gemini)
 config.json
 .env
+
+# Relatorios e Logs de Clientes (Privacidade / LGPD - NUNCA subir para o GitHub)
 reports/*.html
 reports/*.json
 logs/*.log
 logs/*.html
 !reports/.gitkeep
 !logs/.gitkeep
+
+# Cache do Python e Compilacao PyInstaller
 __pycache__/
 *.py[cod]
+*$py.class
 build/
 dist/
 *.spec
+.venv/
+venv/
+
+# Arquivos temporarios do Sistema Operacional
+Thumbs.db
+.DS_Store
+desktop.ini

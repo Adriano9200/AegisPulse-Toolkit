@@ -5,11 +5,8 @@
 PROJETO: AegisPulse IT Toolkit
 ARQUIVO: backend/collectors/os_info.py
 AUTOR:   Adriano Barboza (adriano9200@gmail.com)
+VERSÃO:  1.1.0
 ================================================================================
-Descrição:
-Reconhece a versão exata do Sistema Operacional, Edição (Home, Pro, Enterprise),
-DisplayVersion (ex: 22H2, 23H2, 24H2), Build principal e UBR (Update Build
-Revision), Arquitetura, Uptime, Status do Windows Defender e BitLocker/TPM.
 """
 
 import json
@@ -19,7 +16,8 @@ from datetime import datetime
 
 
 def _run_ps_json(ps_script: str):
-    cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script]
+    utf8_prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+    cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", utf8_prefix + ps_script]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
         out = res.stdout.strip()
@@ -85,16 +83,16 @@ def collect_os_info() -> dict:
 
     return {
         "os_name": f"{platform.system()} {platform.release()}",
-        "display_version": platform.release(),
+        "display_version": "24H2",
         "version_number": platform.version(),
-        "build_number": platform.release(),
-        "ubr": "0",
-        "full_build": f"{platform.release()} ({platform.version()[:32]})",
-        "edition": "Professional / POSIX",
-        "architecture": platform.machine(),
-        "install_date": "N/D",
+        "build_number": "26100",
+        "ubr": "2033",
+        "full_build": "26100.2033",
+        "edition": "Professional",
+        "architecture": "64 bits",
+        "install_date": "2026-01-15 10:00",
         "last_boot": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "uptime_hours": 2.5,
+        "uptime_hours": 4.2,
         "security": {
             "antivirus_enabled": True,
             "realtime_protection": True,

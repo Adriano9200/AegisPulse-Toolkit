@@ -5,11 +5,8 @@
 PROJETO: AegisPulse IT Toolkit
 ARQUIVO: backend/server.py (Servidor HTTP/REST API Modular)
 AUTOR:   Adriano Barboza (adriano9200@gmail.com)
+VERSÃO:  1.1.0
 ================================================================================
-Descrição:
-Servidor HTTP local que serve a interface gráfica (Frontend SPA) e expõe os
-endpoints REST JSON para diagnóstico de hardware, SO, BIOS/Drivers, Softwares,
-manutenção segura, integração Gemini AI e geração de relatórios HTML.
 """
 
 import json
@@ -35,8 +32,19 @@ from backend.collectors.drivers_bios import (
 from backend.collectors.software import (
     collect_installed_software,
     run_winget_action,
+    remove_bloatware,
 )
 from backend.services.maintenance import run_maintenance_task
+from backend.services.network_tools import (
+    collect_network_diagnostics,
+    apply_dns_preset,
+    recover_wifi_passwords,
+    run_download_speedtest,
+)
+from backend.services.gaming_dll import (
+    audit_gaming_and_dlls,
+    run_gaming_optimization,
+)
 from backend.services.gemini_ai import check_internet_connection, query_gemini_ai
 from backend.services.html_reporter import generate_html_report
 
@@ -59,7 +67,6 @@ def log_action(action_name: str, summary: str) -> None:
 
 class AegisPulseRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
-        # Silencia logs repetitivos de arquivos estáticos no terminal
         pass
 
     def _send_json(self, data: dict, status: int = 200) -> None:
@@ -114,6 +121,9 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             os_data = collect_os_info()
             drv_bios = collect_drivers_and_bios()
             sw = collect_installed_software()
+            net = collect_network_diagnostics()
+            gaming = audit_gaming_and_dlls()
+
             snapshot = {
                 "collected_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
                 "author": "Adriano Barboza",
@@ -122,11 +132,19 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 "os": os_data,
                 "drivers_bios": drv_bios,
                 "software": sw,
+                "network": net,
+                "gaming": gaming,
                 "action_logs": SESSION_STATE["action_logs"],
             }
             SESSION_STATE["last_snapshot"] = snapshot
-            log_action("Diagnóstico Completo", f"Varredura executada em {hw.get('hostname')}")
+            log_action("Diagnóstico Completo v1.1", f"Varredura executada em {hw.get('hostname')}")
             self._send_json(snapshot)
+            return
+
+        if route == "/api/logs":
+            if not self._require_auth():
+                return
+            self._send_json({"action_logs": SESSION_STATE["action_logs"]})
             return
 
         if route.startswith("/reports/"):
@@ -141,7 +159,6 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(content)
                 return
 
-        # Servir arquivos estáticos do Frontend
         frontend_dir = base_dir / "frontend"
         if route == "/" or route == "/index.html":
             file_path = frontend_dir / "index.html"
@@ -188,8 +205,18 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
         if route == "/api/software/winget":
             action = str(body.get("action", ""))
             pkg_id = str(body.get("package_id", ""))
-            res = run_winget_action(action=action, package_id=pkg_id)
-            log_action(f"Winget ({action})", f"Pacote: {pkg_id or 'Todos'} -> {res.get('message')}")
+            app_name = str(body.get("app_name", ""))
+            res = run_winget_action(action=action, package_id=pkg_id, app_name=app_name)
+            log_action(f"Winget ({action})", f"Alvo: {pkg_id or app_name or 'Todos'} -> {res.get('message')}")
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/software/debloat":
+            packages = body.get("packages") or []
+            res = remove_bloatware(packages)
+            log_action("Remoção de Bloatware", res.get("message", ""))
+            res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return
 
@@ -197,6 +224,33 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             install_flag = bool(body.get("install", False))
             res = scan_and_install_windows_driver_updates(install=install_flag)
             log_action("Windows Update Drivers", res.get("message", ""))
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/network/action":
+            sub_action = str(body.get("action", ""))
+            if sub_action == "set_dns":
+                preset = str(body.get("preset", "cloudflare"))
+                res = apply_dns_preset(preset)
+                log_action("Configuração de DNS", res.get("message", ""))
+            elif sub_action == "wifi_passwords":
+                res = recover_wifi_passwords()
+                log_action("Auditoria Wi-Fi", res.get("message", ""))
+            elif sub_action == "speedtest":
+                res = run_download_speedtest()
+                log_action("Teste de Velocidade", res.get("message", ""))
+            else:
+                res = {"success": False, "message": "Ação de rede inválida."}
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/gaming/action":
+            opt_action = str(body.get("action", ""))
+            res = run_gaming_optimization(opt_action)
+            log_action(f"Otimização Gamer ({opt_action})", res.get("message", ""))
+            res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return
 
@@ -204,6 +258,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             task_id = str(body.get("task_id", ""))
             res = run_maintenance_task(task_id)
             log_action(res.get("task", task_id), res.get("summary", ""))
+            res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return
 
@@ -224,6 +279,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             if res.get("success"):
                 SESSION_STATE["last_ai_analysis"] = res.get("response_text", "")
                 log_action("Consulta Gemini AI", "Diagnóstico inteligente gerado com sucesso.")
+            res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return
 
@@ -245,6 +301,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 action_logs=SESSION_STATE["action_logs"],
             )
             log_action("Exportação de Laudo HTML", f"Arquivo gerado: {res.get('filename')}")
+            res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return
 
@@ -258,7 +315,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 updates["require_operator_pin"] = bool(body["require_operator_pin"])
             ok = save_config(base_dir, updates)
             log_action("Atualização de Configuração", "Parâmetros locais atualizados em config.json.")
-            self._send_json({"success": ok, "message": "Configurações salvas com sucesso."})
+            self._send_json({"success": ok, "message": "Configurações salvas com sucesso.", "action_logs": SESSION_STATE["action_logs"]})
             return
 
         self._send_json({"error": "invalid_endpoint"}, status=404)

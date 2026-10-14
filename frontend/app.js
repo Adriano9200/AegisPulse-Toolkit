@@ -3,6 +3,7 @@
 PROJETO: AegisPulse IT Toolkit — Frontend Controller
 ARQUIVO: frontend/app.js
 AUTOR:   Adriano Barboza (adriano9200@gmail.com)
+VERSÃO:  1.1.0
 ================================================================================
 */
 
@@ -13,7 +14,13 @@ function showToast(msg) {
     const t = document.getElementById("statusToast");
     t.textContent = msg;
     t.classList.remove("hidden");
-    setTimeout(() => t.classList.add("hidden"), 5500);
+    setTimeout(() => t.classList.add("hidden"), 6000);
+}
+
+function syncActionLogs(res) {
+    if (res && Array.isArray(res.action_logs)) {
+        renderLogsTable(res.action_logs);
+    }
 }
 
 async function apiFetch(path, options = {}) {
@@ -27,7 +34,9 @@ async function apiFetch(path, options = {}) {
         document.getElementById("authModal").classList.remove("hidden");
         throw new Error("Não autorizado");
     }
-    return resp.json();
+    const data = await resp.json();
+    syncActionLogs(data);
+    return data;
 }
 
 // Navegação de Abas
@@ -62,12 +71,12 @@ document.getElementById("btnUnlock").addEventListener("click", async () => {
 });
 
 async function runFullDiagnostic() {
-    showToast("🔍 Executando varredura completa de Hardware, SO, BIOS, Drivers e Softwares...");
+    showToast("🔍 Executando varredura completa v1.1 (Hardware, SO, BIOS, Drivers, Softwares, Bloatware, Rede e DLLs)...");
     try {
         const data = await apiFetch("/api/scan/full");
         CURRENT_SNAPSHOT = data;
         renderDashboard(data);
-        showToast("✅ Diagnóstico concluído com sucesso!");
+        showToast("✅ Diagnóstico v1.1 concluído com sucesso!");
     } catch (err) {
         console.warn("Aguardando autenticação ou falha na coleta:", err);
     }
@@ -79,6 +88,8 @@ function renderDashboard(data) {
     const drv = data.drivers_bios || {};
     const bios = drv.bios || {};
     const sw = data.software || {};
+    const net = data.network || {};
+    const gaming = data.gaming || {};
 
     document.getElementById("machineTitle").textContent = `${hw.manufacturer || "PC"} — ${hw.model || "Workstation"}`;
     document.getElementById("machineSubtitle").textContent = `Hostname: ${hw.hostname} | Coletado em: ${data.collected_at} | Autor do Toolkit: Adriano Barboza`;
@@ -102,12 +113,11 @@ function renderDashboard(data) {
     document.getElementById("kpiCpu").textContent = firstCpu;
     document.getElementById("kpiRam").textContent = `RAM Instalada: ${hw.total_ram_gb} GB (${(hw.ram_modules || []).length} pente(s))`;
 
-    document.getElementById("kpiAlerts").textContent = `${sw.outdated_count || 0} Apps Obsoletos | ${drv.outdated_drivers_count || 0} Drivers Antigos`;
+    document.getElementById("kpiAlerts").textContent = `${sw.outdated_count || 0} Apps Obsoletos | ${sw.bloatware_count || 0} Bloatwares | ${gaming.missing_dlls_count || 0} DLLs Ausentes`;
     document.getElementById("kpiBiosStatus").textContent = `BIOS ${bios.smbios_version} (${bios.status_label})`;
 
     // Detalhes do SO
-    const osList = document.getElementById("osDetailsList");
-    osList.innerHTML = `
+    document.getElementById("osDetailsList").innerHTML = `
         <div class="kv-row"><span class="muted">Sistema Operacional</span><strong>${os.os_name}</strong></div>
         <div class="kv-row"><span class="muted">Versão / Release</span><strong>${os.display_version}</strong></div>
         <div class="kv-row"><span class="muted">Build Completa (UBR)</span><code>${os.full_build}</code></div>
@@ -118,8 +128,7 @@ function renderDashboard(data) {
 
     // Segurança
     const sec = os.security || {};
-    const secList = document.getElementById("securityDetailsList");
-    secList.innerHTML = `
+    document.getElementById("securityDetailsList").innerHTML = `
         <div class="kv-row"><span class="muted">Antivírus Ativo</span><span class="badge ${sec.antivirus_enabled ? 'ok' : 'err'}">${sec.antivirus_enabled ? 'Ativo' : 'Desativado'}</span></div>
         <div class="kv-row"><span class="muted">Proteção em Tempo Real</span><span class="badge ${sec.realtime_protection ? 'ok' : 'warn'}">${sec.realtime_protection ? 'Protegido' : 'Alerta'}</span></div>
         <div class="kv-row"><span class="muted">Idade das Assinaturas</span><span>${sec.signature_age_days} dia(s)</span></div>
@@ -138,18 +147,16 @@ function renderDashboard(data) {
         <div class="kv-row"><span class="muted">Driver de Vídeo Atual</span><code>${gpu.driver_version || 'N/D'}</code></div>
     `;
 
-    const ramBody = document.getElementById("ramTableBody");
-    ramBody.innerHTML = (hw.ram_modules || []).map(m => `
+    document.getElementById("ramTableBody").innerHTML = (hw.ram_modules || []).map(m => `
         <tr>
             <td><strong>${m.slot}</strong></td>
-            <td>${m.manufacturer}</td>
+            <td><strong>${m.manufacturer}</strong></td>
             <td><code>${m.part_number}</code></td>
             <td>${m.capacity_gb} GB</td>
             <td>${m.speed_mhz} MHz</td>
         </tr>
     `).join("") || '<tr><td colspan="5">Módulos não detalhados pelo SMBIOS.</td></tr>';
 
-    const diskBody = document.getElementById("diskTableBody");
     const diskRows = (hw.disks || []).map(d => `
         <tr>
             <td><strong>🖴 ${d.model}</strong> (Físico)</td>
@@ -168,7 +175,7 @@ function renderDashboard(data) {
             <td><span class="badge ${v.used_percent > 85 ? 'err' : 'ok'}">${v.used_percent}% ocupado</span></td>
         </tr>
     `).join("");
-    diskBody.innerHTML = diskRows + volRows;
+    document.getElementById("diskTableBody").innerHTML = diskRows + volRows;
 
     // Aba Drivers & BIOS
     document.getElementById("btnVendorSupport").href = bios.vendor_support_url || "https://www.catalog.update.microsoft.com/";
@@ -180,32 +187,47 @@ function renderDashboard(data) {
     `;
     renderDriversTable(drv.drivers || []);
 
-    // Aba Softwares & Winget
-    const outBody = document.getElementById("outdatedSwTableBody");
-    outBody.innerHTML = (sw.outdated_software || []).map(s => `
+    // Aba Softwares, Debloat & Uninstaller
+    document.getElementById("outdatedSwTableBody").innerHTML = (sw.outdated_software || []).map(s => `
         <tr>
             <td><strong>${s.name}</strong></td>
             <td><code>${s.id}</code></td>
             <td><span class="badge warn">${s.current_version}</span></td>
             <td><span class="badge ok">${s.available_version}</span></td>
-            <td><button class="btn primary" onclick="wingetAction('upgrade_one', '${s.id}')">Atualizar</button></td>
+            <td><button class="btn primary" onclick="wingetAction('upgrade_one', '${s.id}', '')">Atualizar</button></td>
         </tr>
     `).join("") || '<tr><td colspan="5">Todos os softwares monitorados pelo Winget estão atualizados!</td></tr>';
 
-    const catGrid = document.getElementById("catalogGrid");
-    catGrid.innerHTML = (sw.essential_catalog || []).map(item => `
+    const bwList = sw.bloatware_list || [];
+    document.getElementById("bloatwareCount").textContent = bwList.length;
+    document.getElementById("bloatwareTableBody").innerHTML = bwList.map(b => `
+        <tr>
+            <td><strong>${b.title}</strong></td>
+            <td><code>${b.package_name}</code></td>
+            <td>${b.desc}</td>
+            <td><button class="btn danger" onclick="removeBloatwareItems(['${b.package_name}'])">🗑️ Remover Bloatware</button></td>
+        </tr>
+    `).join("") || '<tr><td colspan="4">Nenhum bloatware pré-instalado detectado neste sistema!</td></tr>';
+
+    document.getElementById("catalogGrid").innerHTML = (sw.essential_catalog || []).map(item => `
         <div class="catalog-item">
             <div>
                 <span class="muted">${item.category}</span>
                 <h4>${item.name}</h4>
                 <code>${item.id}</code>
             </div>
-            <button class="btn secondary" onclick="wingetAction('install', '${item.id}')">⬇️ Instalar (Winget)</button>
+            <button class="btn secondary" onclick="wingetAction('install', '${item.id}', '')">⬇️ Instalar (Winget)</button>
         </div>
     `).join("");
 
     document.getElementById("swTotalCount").textContent = sw.total_installed || 0;
     renderInstalledSoftwareTable(sw.installed_software || []);
+
+    // Aba Rede & Internet
+    renderNetworkTab(net);
+
+    // Aba Games & DLLs
+    renderGamingTab(gaming);
 
     // Aba Logs
     renderLogsTable(data.action_logs || []);
@@ -227,13 +249,74 @@ function renderDriversTable(drivers) {
 
 function renderInstalledSoftwareTable(list) {
     const tbody = document.getElementById("installedSwTableBody");
-    tbody.innerHTML = list.map(s => `
+    tbody.innerHTML = list.map(s => {
+        const safeName = (s.name || "").replace(/'/g, "\\'");
+        return `
         <tr>
             <td><strong>${s.name}</strong></td>
             <td><code>${s.version}</code></td>
             <td>${s.publisher}</td>
             <td>${s.install_date}</td>
+            <td><button class="btn danger" onclick="uninstallSoftware('${safeName}')">🗑️ Desinstalar</button></td>
         </tr>
+        `;
+    }).join("");
+}
+
+function renderNetworkTab(net) {
+    const adapters = net.adapters || [];
+    const adBox = document.getElementById("netAdaptersBox");
+    adBox.innerHTML = adapters.map(a => `
+        <div class="maint-card" style="margin-bottom:10px;">
+            <div class="flex-between">
+                <strong>🔌 ${a.InterfaceAlias} — ${a.Description}</strong>
+                <span class="badge ok">${a.LinkSpeed || 'Ativo'}</span>
+            </div>
+            <div class="kv-row"><span class="muted">Endereço IPv4</span><code>${a.IPv4Address || 'N/D'}</code></div>
+            <div class="kv-row"><span class="muted">Gateway Padrão</span><code>${a.Gateway || 'N/D'}</code></div>
+            <div class="kv-row"><span class="muted">Servidores DNS Atuais</span><code>${a.DNSServers || 'Automático'}</code></div>
+            <div class="kv-row"><span class="muted">Endereço Físico (MAC)</span><code>${a.MacAddress || 'N/D'}</code></div>
+        </div>
+    `).join("") || '<p class="muted">Nenhum adaptador conectado detectado.</p>';
+
+    const pings = net.pings || [];
+    document.getElementById("netPingsBody").innerHTML = pings.map(p => `
+        <tr>
+            <td><strong>${p.Target}</strong></td>
+            <td><code>${p.Host}</code></td>
+            <td><span class="badge ${p.Reachable ? 'ok' : 'err'}">${p.Reachable ? 'Online' : 'Sem Resposta'}</span></td>
+            <td><strong>${p.LatencyMs >= 0 ? p.LatencyMs + ' ms' : '—'}</strong></td>
+        </tr>
+    `).join("");
+}
+
+function renderGamingTab(gaming) {
+    document.getElementById("missingDllsCount").textContent = gaming.missing_dlls_count || 0;
+    const dllBody = document.getElementById("dllAuditTableBody");
+    dllBody.innerHTML = (gaming.dll_audit || []).map(d => `
+        <tr>
+            <td><strong><code>${d.dll}</code></strong></td>
+            <td>${d.group}</td>
+            <td><span class="badge ${d.sys32_64bit === 'Presente' ? 'ok' : 'err'}">${d.sys32_64bit}</span></td>
+            <td><span class="badge ${d.syswow64_32bit.includes('Presente') || d.syswow64_32bit.includes('N/A') ? 'ok' : 'err'}">${d.syswow64_32bit}</span></td>
+            <td>
+                ${d.status_ok
+                    ? '<span class="muted">Íntegra</span>'
+                    : `<button class="btn primary" onclick="wingetAction('install', '${d.fix_pkg}', '')">Reparar</button>`}
+            </td>
+        </tr>
+    `).join("");
+
+    const rtGrid = document.getElementById("gamingRuntimesGrid");
+    rtGrid.innerHTML = (gaming.runtimes_catalog || []).map(r => `
+        <div class="catalog-item">
+            <div>
+                <h4>${r.name}</h4>
+                <p class="muted" style="margin:4px 0;">${r.desc}</p>
+                <code>${r.id}</code>
+            </div>
+            <button class="btn secondary" onclick="wingetAction('install', '${r.id}', '')">⬇️ Instalar / Reparar</button>
+        </div>
     `).join("");
 }
 
@@ -270,15 +353,21 @@ document.getElementById("swSearchInput").addEventListener("input", (e) => {
     renderInstalledSoftwareTable(filtered);
 });
 
-// Ações Winget
-async function wingetAction(action, packageId = "") {
-    showToast(`⏳ Executando Winget (${action} ${packageId})... Aguarde.`);
+// Ações Winget (Instalar, Atualizar, Desinstalar)
+async function wingetAction(action, packageId = "", appName = "") {
+    showToast(`⏳ Executando Winget (${action}: ${packageId || appName})... Aguarde.`);
     const res = await apiFetch("/api/software/winget", {
         method: "POST",
-        body: JSON.stringify({ action, package_id: packageId })
+        body: JSON.stringify({ action, package_id: packageId, app_name: appName })
     });
     showToast(res.message || "Operação concluída.");
     runFullDiagnostic();
+}
+
+function uninstallSoftware(appName) {
+    if (confirm(`ATENÇÃO: Deseja realmente desinstalar o programa "${appName}" deste computador?`)) {
+        wingetAction("uninstall", "", appName);
+    }
 }
 
 document.getElementById("btnUpgradeAllSw").addEventListener("click", () => {
@@ -287,18 +376,60 @@ document.getElementById("btnUpgradeAllSw").addEventListener("click", () => {
     }
 });
 
-// Ações de Drivers Windows Update
+// Remoção de Bloatware
+async function removeBloatwareItems(pkgList) {
+    if (!pkgList || !pkgList.length) return;
+    if (!confirm(`Confirmar remoção de ${pkgList.length} aplicativo(s) de Bloatware pré-instalado(s)?`)) return;
+    showToast("🧹 Removendo Bloatwares selecionados via PowerShell Appx...");
+    const res = await apiFetch("/api/software/debloat", {
+        method: "POST",
+        body: JSON.stringify({ packages: pkgList })
+    });
+    showToast(res.message);
+    runFullDiagnostic();
+}
+
+document.getElementById("btnRemoveAllBloatware").addEventListener("click", () => {
+    if (!CURRENT_SNAPSHOT || !CURRENT_SNAPSHOT.software.bloatware_list) return;
+    const allPkgs = CURRENT_SNAPSHOT.software.bloatware_list.map(b => b.package_name);
+    if (!allPkgs.length) {
+        showToast("Nenhum bloatware detectado para remover.");
+        return;
+    }
+    removeBloatwareItems(allPkgs);
+});
+
+// Windows Update Drivers (Exibição em Tabela Organizada!)
 async function handleWuDrivers(installFlag) {
     const box = document.getElementById("wuDriversResult");
     box.classList.remove("hidden");
-    box.textContent = "⏳ Consultando catálogo de drivers no Windows Update...";
+    box.innerHTML = `<div class="toast">⏳ Consultando catálogo oficial de drivers no Windows Update...</div>`;
     const res = await apiFetch("/api/drivers/windows-update", {
         method: "POST",
         body: JSON.stringify({ install: installFlag })
     });
-    box.textContent = res.message + (res.updates && res.updates.length
-        ? " -> " + res.updates.map(u => u.Title).join(" | ")
-        : "");
+    const updates = res.updates || [];
+    if (!updates.length) {
+        box.innerHTML = `<div class="toast">${res.message}</div>`;
+        return;
+    }
+    const rows = updates.map(u => `
+        <tr>
+            <td><strong>${u.Title}</strong></td>
+            <td>${u.DriverManufacturer || 'Fabricante Oficial'}</td>
+            <td>${u.DriverModel || 'Driver / Firmware'}</td>
+            <td><code>${u.DriverVerDate || 'Recente'}</code></td>
+        </tr>
+    `).join("");
+    box.innerHTML = `
+        <h4 style="color:var(--accent);margin-bottom:8px;">✅ ${res.message}</h4>
+        <div class="table-scroll" style="max-height:220px;">
+            <table class="data-table">
+                <thead><tr><th>Pacote Windows Update</th><th>Fabricante</th><th>Modelo</th><th>Data do Driver</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
 }
 
 document.getElementById("btnScanWuDrivers").addEventListener("click", () => handleWuDrivers(false));
@@ -307,6 +438,60 @@ document.getElementById("btnInstallWuDrivers").addEventListener("click", () => {
         handleWuDrivers(true);
     }
 });
+
+// Ações de Rede & Internet
+async function setDnsPreset(presetKey) {
+    showToast(`🌐 Aplicando configuração de DNS (${presetKey})...`);
+    const res = await apiFetch("/api/network/action", {
+        method: "POST",
+        body: JSON.stringify({ action: "set_dns", preset: presetKey })
+    });
+    showToast(res.message);
+    runFullDiagnostic();
+}
+
+document.getElementById("btnRecoverWifi").addEventListener("click", async () => {
+    showToast("🔑 Consultando perfis de redes Wi-Fi salvas no Windows...");
+    const res = await apiFetch("/api/network/action", {
+        method: "POST",
+        body: JSON.stringify({ action: "wifi_passwords" })
+    });
+    const tbody = document.getElementById("wifiPasswordsBody");
+    const list = res.profiles || [];
+    if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="2">${res.message}</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = list.map(p => `
+        <tr>
+            <td><strong>📶 ${p.ssid}</strong></td>
+            <td><code>${p.password}</code></td>
+        </tr>
+    `).join("");
+    showToast(res.message);
+});
+
+document.getElementById("btnRunSpeedtest").addEventListener("click", async () => {
+    const out = document.getElementById("speedtestResultText");
+    out.textContent = "⏳ Medindo velocidade...";
+    const res = await apiFetch("/api/network/action", {
+        method: "POST",
+        body: JSON.stringify({ action: "speedtest" })
+    });
+    out.textContent = res.success ? `⚡ ${res.download_mbps} Mbps` : `⚠️ ${res.message}`;
+    showToast(res.message);
+});
+
+// Ações de Games & DLLs
+async function triggerGamingAction(actionKey) {
+    showToast("🎮 Executando otimização/reparo de Games & DLLs... Aguarde.");
+    const res = await apiFetch("/api/gaming/action", {
+        method: "POST",
+        body: JSON.stringify({ action: actionKey })
+    });
+    showToast(res.message);
+    runFullDiagnostic();
+}
 
 // Manutenção
 async function triggerMaintenance(taskId) {
@@ -357,7 +542,6 @@ async function exportHtmlReport() {
 document.getElementById("btnRescan").addEventListener("click", runFullDiagnostic);
 document.getElementById("btnExportHtml").addEventListener("click", exportHtmlReport);
 
-// Inicialização
 (async function init() {
     try {
         const st = await fetch("/api/auth/status", {

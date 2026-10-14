@@ -4,22 +4,22 @@
 PROJETO: AegisPulse IT Toolkit — Diagnostic, Maintenance & AI Suite
 ARQUIVO: frontend/index.html
 AUTOR:   Adriano Barboza (adriano9200@gmail.com)
-LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
+VERSÃO:  1.1.0
 ================================================================================
 -->
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AegisPulse IT Toolkit — Por Adriano Barboza</title>
+    <title>AegisPulse IT Toolkit v1.1 — Por Adriano Barboza</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- MODAL DE BLOQUEIO DO OPERADOR (RESTRIÇÃO DE USO) -->
+    <!-- MODAL DE BLOQUEIO DO OPERADOR -->
     <div id="authModal" class="modal-overlay hidden">
         <div class="modal-card">
             <div class="modal-badge">ACESSO RESTRITO AO OPERADOR</div>
-            <h2>AegisPulse IT Toolkit</h2>
+            <h2>AegisPulse IT Toolkit v1.1</h2>
             <p class="modal-sub">Desenvolvido por <strong>Adriano Barboza</strong></p>
             <p class="modal-desc">
                 Este software é protegido contra uso não autorizado. Insira sua Chave/PIN de Operador para liberar o console de diagnóstico e manutenção.
@@ -39,7 +39,7 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                 <div class="brand-icon">🛡️</div>
                 <div>
                     <h1>AegisPulse</h1>
-                    <span>IT Toolkit v1.0</span>
+                    <span>IT Toolkit v1.1</span>
                 </div>
             </div>
 
@@ -54,7 +54,13 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                     <span>⚙️</span> Drivers & BIOS
                 </button>
                 <button class="nav-item" data-tab="tab-software">
-                    <span>📦</span> Softwares & Winget
+                    <span>📦</span> Softwares & Debloat
+                </button>
+                <button class="nav-item" data-tab="tab-network">
+                    <span>🌐</span> Rede & Internet
+                </button>
+                <button class="nav-item" data-tab="tab-gaming">
+                    <span>🎮</span> Games & DLLs
                 </button>
                 <button class="nav-item" data-tab="tab-maintenance">
                     <span>🧰</span> Manutenção & Reparo
@@ -76,11 +82,10 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
 
         <!-- ÁREA PRINCIPAL -->
         <main class="main-content">
-            <!-- TOPBAR -->
             <header class="topbar">
                 <div>
                     <h2 id="machineTitle">Carregando diagnóstico do equipamento...</h2>
-                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse inspeciona o sistema</p>
+                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse v1.1 inspeciona o sistema</p>
                 </div>
                 <div class="topbar-actions">
                     <span id="netBadge" class="status-pill">Verificando Rede...</span>
@@ -89,7 +94,6 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                 </div>
             </header>
 
-            <!-- BANNER DE PROGRESSO / STATUS -->
             <div id="statusToast" class="toast hidden"></div>
 
             <!-- ABA 1: VISÃO GERAL & SO -->
@@ -111,7 +115,7 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                         <small id="kpiRam" class="muted">RAM Total: —</small>
                     </div>
                     <div class="kpi-card">
-                        <span class="kpi-label">SAÚDE DE DRIVERS & SOFTWARES</span>
+                        <span class="kpi-label">SAÚDE DE DRIVERS, APPS & DLLS</span>
                         <strong id="kpiAlerts">—</strong>
                         <small id="kpiBiosStatus" class="muted">BIOS: —</small>
                     </div>
@@ -137,10 +141,10 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                         <div id="hwCoreList" class="kv-list"></div>
                     </div>
                     <div class="panel-card">
-                        <h3>Módulos de Memória RAM Instalados</h3>
+                        <h3>Módulos de Memória RAM Instalados (Decodificador JEDEC Ativo)</h3>
                         <table class="data-table">
                             <thead>
-                                <tr><th>Slot</th><th>Fabricante</th><th>Part Number</th><th>Capacidade</th><th>Velocidade</th></tr>
+                                <tr><th>Slot</th><th>Fabricante Real</th><th>Part Number</th><th>Capacidade</th><th>Velocidade</th></tr>
                             </thead>
                             <tbody id="ramTableBody"></tbody>
                         </table>
@@ -164,7 +168,7 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                     <div class="flex-between">
                         <div>
                             <h3>Diagnóstico de BIOS / UEFI e Atualização de Drivers</h3>
-                            <p class="muted">Identifica a versão/data da BIOS, dispositivos com falha no Gerenciador de Dispositivos e drivers defasados.</p>
+                            <p class="muted">Distingue drivers nativos do Windows (2006) de drivers antigos reais e lista atualizações do Windows Update em tabela.</p>
                         </div>
                         <div class="btn-row">
                             <a id="btnVendorSupport" href="#" target="_blank" class="btn secondary">🌐 Página Oficial do Fabricante (BIOS/Drivers)</a>
@@ -173,7 +177,7 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                         </div>
                     </div>
                     <div id="biosSummaryBox" class="kv-grid" style="margin-top:14px;"></div>
-                    <div id="wuDriversResult" class="result-box hidden"></div>
+                    <div id="wuDriversResult" class="hidden" style="margin-top:14px;"></div>
                 </div>
 
                 <div class="panel-card">
@@ -192,12 +196,12 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                 </div>
             </section>
 
-            <!-- ABA 4: SOFTWARES & WINGET -->
+            <!-- ABA 4: SOFTWARES, DESINSTALADOR & DEBLOAT -->
             <section id="tab-software" class="tab-panel">
                 <div class="panel-card" style="margin-bottom:16px;">
                     <div class="flex-between">
                         <div>
-                            <h3>Softwares Obsoletos Detectados (Integração Winget)</h3>
+                            <h3>1. Softwares Obsoletos Detectados (Integração Winget)</h3>
                             <p class="muted">Compare a versão instalada com a versão oficial mais recente e atualize em 1 clique.</p>
                         </div>
                         <button class="btn primary" id="btnUpgradeAllSw">🚀 Atualizar Todos os Obsoletos</button>
@@ -211,19 +215,35 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                 </div>
 
                 <div class="panel-card" style="margin-bottom:16px;">
-                    <h3>Instalador Rápido — Kit Essencial Pós-Formatação (1-Clique)</h3>
+                    <div class="flex-between">
+                        <div>
+                            <h3>2. Removedor Seguro de Bloatware (<span id="bloatwareCount">0</span> detectados)</h3>
+                            <p class="muted">Apps pré-instalados do Windows (Cortana, Bing News, Solitaire, Feedback Hub, Clipchamp, etc.) que consomem recursos em segundo plano.</p>
+                        </div>
+                        <button class="btn danger" id="btnRemoveAllBloatware">🧹 Remover Todos os Bloatwares Detectados</button>
+                    </div>
+                    <table class="data-table" style="margin-top:12px;">
+                        <thead>
+                            <tr><th>Aplicativo Pré-Instalado (UWP)</th><th>Pacote Técnico</th><th>Descrição</th><th>Ação</th></tr>
+                        </thead>
+                        <tbody id="bloatwareTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <h3>3. Instalador Rápido — Kit Essencial Pós-Formatação (1-Clique)</h3>
                     <div id="catalogGrid" class="catalog-grid"></div>
                 </div>
 
                 <div class="panel-card">
                     <div class="flex-between" style="margin-bottom:12px;">
-                        <h3>Inventário Completo de Softwares Instalados (<span id="swTotalCount">0</span>)</h3>
-                        <input type="text" id="swSearchInput" class="search-input" placeholder="Buscar programa instalado...">
+                        <h3>4. Inventário Completo & Desinstalador Universal (<span id="swTotalCount">0</span> programas)</h3>
+                        <input type="text" id="swSearchInput" class="search-input" placeholder="Buscar programa para inspecionar ou desinstalar...">
                     </div>
                     <div class="table-scroll">
                         <table class="data-table">
                             <thead>
-                                <tr><th>Nome do Programa</th><th>Versão</th><th>Fabricante</th><th>Instalação</th></tr>
+                                <tr><th>Nome do Programa</th><th>Versão</th><th>Fabricante</th><th>Instalação</th><th>Desinstalar</th></tr>
                             </thead>
                             <tbody id="installedSwTableBody"></tbody>
                         </table>
@@ -231,12 +251,118 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                 </div>
             </section>
 
-            <!-- ABA 5: MANUTENÇÃO & REPARO -->
+            <!-- ABA 5: REDE & INTERNET -->
+            <section id="tab-network" class="tab-panel">
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>Adaptadores de Rede Ativos (IP, MAC, Gateway e DNS)</h3>
+                        <div id="netAdaptersBox"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>Teste de Latência (Ping) & Velocidade de Download</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Destino</th><th>Host</th><th>Status</th><th>Latência Média</th></tr>
+                            </thead>
+                            <tbody id="netPingsBody"></tbody>
+                        </table>
+                        <div class="flex-between" style="margin-top:14px;">
+                            <button class="btn primary" id="btnRunSpeedtest">🚀 Medir Velocidade de Download (Cloudflare CDN)</button>
+                            <strong id="speedtestResultText" style="color:var(--accent);"></strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Troca Rápida de DNS (1-Clique)</h3>
+                        <p class="muted" style="margin-bottom:12px;">Aplique DNS rápidos e seguros nos adaptadores ativos e limpe o cache automaticamente.</p>
+                        <div class="maint-grid">
+                            <div class="maint-card">
+                                <h4>⚡ Cloudflare DNS (1.1.1.1)</h4>
+                                <p class="muted">Menor tempo de resposta para navegação e jogos online.</p>
+                                <button class="btn primary" onclick="setDnsPreset('cloudflare')">Aplicar Cloudflare</button>
+                            </div>
+                            <div class="maint-card">
+                                <h4>🌐 Google Public DNS (8.8.8.8)</h4>
+                                <p class="muted">Alta estabilidade para escritórios e serviços corporativos.</p>
+                                <button class="btn secondary" onclick="setDnsPreset('google')">Aplicar Google DNS</button>
+                            </div>
+                            <div class="maint-card">
+                                <h4>🛡️ Cloudflare Security (1.1.1.2)</h4>
+                                <p class="muted">Bloqueia domínios de Malware e Phishing automaticamente.</p>
+                                <button class="btn secondary" onclick="setDnsPreset('cloudflare_security')">Aplicar DNS Seguro</button>
+                            </div>
+                            <div class="maint-card">
+                                <h4>🔄 Restaurar DNS (DHCP)</h4>
+                                <p class="muted">Volta para o DNS padrão fornecido pelo roteador/operadora.</p>
+                                <button class="btn secondary" onclick="setDnsPreset('dhcp')">Restaurar Padrão</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-card">
+                        <div class="flex-between" style="margin-bottom:10px;">
+                            <div>
+                                <h3>Recuperador de Senhas de Wi-Fi Salvas</h3>
+                                <p class="muted">Exibe todas as redes Wi-Fi já conectadas neste Windows e suas senhas.</p>
+                            </div>
+                            <button class="btn primary" id="btnRecoverWifi">🔑 Revelar Senhas Wi-Fi</button>
+                        </div>
+                        <div class="table-scroll" style="max-height:240px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Nome da Rede (SSID)</th><th>Senha Salva</th></tr>
+                                </thead>
+                                <tbody id="wifiPasswordsBody">
+                                    <tr><td colspan="2">Clique em "Revelar Senhas Wi-Fi" para consultar os perfis WLAN do Windows.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 6: GAMES, RUNTIMES & DLLS -->
+            <section id="tab-gaming" class="tab-panel">
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>Otimizador PC Gamer & Reparo Oficial de DLLs (<span id="missingDllsCount">0</span> DLLs ausentes)</h3>
+                            <p class="muted">Audita DLLs em System32 (64-bit) e SysWOW64 (32-bit) e instala os pacotes oficiais Microsoft Visual C++ e DirectX sem riscos.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn primary" onclick="triggerGamingAction('repair_all_vc_directx')">🔧 Reparar Todas as DLLs (VC++ & DirectX Oficial)</button>
+                            <button class="btn secondary" onclick="triggerGamingAction('ultimate_power')">⚡ Ativar Energia Desempenho Máximo</button>
+                            <button class="btn secondary" onclick="triggerGamingAction('clean_shader_cache')">🧹 Limpar Cache de Shaders DirectX/GPU</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Auditoria de DLLs Críticas (System32 & SysWOW64)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Arquivo DLL</th><th>Biblioteca</th><th>64-bit (System32)</th><th>32-bit (SysWOW64)</th><th>Ação</th></tr>
+                            </thead>
+                            <tbody id="dllAuditTableBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="panel-card">
+                        <h3>Instalador Individual de Runtimes para Jogos (Winget)</h3>
+                        <div id="gamingRuntimesGrid" class="catalog-grid"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 7: MANUTENÇÃO & REPARO -->
             <section id="tab-maintenance" class="tab-panel">
                 <div class="panel-card">
                     <h3>Execução de Rotinas Seguras de Manutenção e Reparo</h3>
                     <p class="muted" style="margin-bottom:16px;">
-                        Todas as operações seguem o protocolo de segurança do IT Commander Supremo e são registradas no Log HTML da sessão.
+                        Todas as operações seguem o protocolo de segurança do IT Commander Supremo e atualizam o Log HTML automaticamente.
                     </p>
                     <div class="maint-grid">
                         <div class="maint-card">
@@ -268,7 +394,7 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                 </div>
             </section>
 
-            <!-- ABA 6: IA GEMINI & CONFIG -->
+            <!-- ABA 8: IA GEMINI & CONFIG -->
             <section id="tab-gemini" class="tab-panel">
                 <div class="two-col">
                     <div class="panel-card">
@@ -299,13 +425,13 @@ LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
                 </div>
             </section>
 
-            <!-- ABA 7: RELATÓRIOS & LOGS HTML -->
+            <!-- ABA 9: RELATÓRIOS & LOGS HTML -->
             <section id="tab-logs" class="tab-panel">
                 <div class="panel-card">
                     <div class="flex-between">
                         <div>
                             <h3>Logs de Auditoria da Sessão & Exportação de Laudo HTML</h3>
-                            <p class="muted">Exporte um laudo técnico visual completo em HTML (pronto para enviar ao cliente ou salvar em PDF).</p>
+                            <p class="muted">Atualizado automaticamente em tempo real a cada ação executada.</p>
                         </div>
                         <button class="btn primary" onclick="exportHtmlReport()">📄 Gerar e Abrir Relatório HTML Agora</button>
                     </div>

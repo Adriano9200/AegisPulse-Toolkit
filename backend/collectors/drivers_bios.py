@@ -5,17 +5,8 @@
 PROJETO: AegisPulse IT Toolkit
 ARQUIVO: backend/collectors/drivers_bios.py
 AUTOR:   Adriano Barboza (adriano9200@gmail.com)
+VERSÃO:  1.1.0
 ================================================================================
-Descrição:
-1. Coleta dados completos da BIOS/UEFI (Fabricante, Versão SMBIOS, Data de
-   lançamento, idade em meses e alerta caso esteja desatualizada, gerando link
-   oficial do fabricante com base na marca/Service Tag).
-2. Inventaria todos os Drivers instalados (Nome, Classe, Fabricante, Versão,
-   Data) e sinaliza:
-   - Dispositivos com erro no Gerenciador de Dispositivos (ErrorCode != 0);
-   - Drivers antigos/defasados (> 36 meses);
-   - Busca atualizações pendentes de drivers via Windows Update API e permite
-     disparar a atualização.
 """
 
 import json
@@ -24,8 +15,9 @@ import subprocess
 from datetime import datetime
 
 
-def _run_ps_json(ps_script: str, timeout: int = 35):
-    cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script]
+def _run_ps_json(ps_script: str, timeout: int = 40):
+    utf8_prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+    cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", utf8_prefix + ps_script]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         out = res.stdout.strip()
@@ -56,7 +48,7 @@ def _get_vendor_support_url(manufacturer: str, serial: str) -> str:
 
 
 def collect_drivers_and_bios() -> dict:
-    """Coleta BIOS e Drivers instalados, apontando desatualizados ou com falha."""
+    """Coleta BIOS e Drivers instalados, filtrando drivers nativos Microsoft 2006."""
     if platform.system() == "Windows":
         ps_query = r"""
         $ErrorActionPreference = 'SilentlyContinue'
@@ -75,7 +67,7 @@ def collect_drivers_and_bios() -> dict:
             Drivers      = $drivers
         } | ConvertTo-Json -Depth 4 -Compress
         """
-        raw = _run_ps_json(ps_query, timeout=40)
+        raw = _run_ps_json(ps_query, timeout=45)
         if raw and isinstance(raw, dict):
             bios_raw = raw.get("BIOS") or {}
             rel_date_str = "N/D"
@@ -129,10 +121,12 @@ def collect_drivers_and_bios() -> dict:
                 if not isinstance(drv, dict):
                     continue
                 d_class = (drv.get("DeviceClass") or "OUTROS").upper()
+                manuf_name = (drv.get("Manufacturer") or "Genérico").strip()
                 d_date_raw = drv.get("DriverDate")
                 d_date_str = "N/D"
                 age_months = 0
                 is_old = False
+                status_text = "OK"
 
                 if isinstance(d_date_raw, str) and "/Date(" in d_date_raw:
                     try:
@@ -140,90 +134,83 @@ def collect_drivers_and_bios() -> dict:
                         dt = datetime.fromtimestamp(ms / 1000.0)
                         d_date_str = dt.strftime("%Y-%m-%d")
                         age_months = max(0, int((datetime.now() - dt).days / 30))
-                        if d_class in critical_classes and age_months >= 36:
+
+                        is_ms_inbox = (
+                            "microsoft" in manuf_name.lower()
+                            and d_date_str.startswith("2006-06-")
+                        )
+                        if is_ms_inbox:
+                            status_text = "Nativo do Windows (Inbox)"
+                            is_old = False
+                        elif d_class in critical_classes and age_months >= 36:
                             is_old = True
                             outdated_count += 1
+                            status_text = "Revisar Versão (> 3 anos)"
                     except Exception:
                         pass
 
                 driver_list.append({
                     "device_name": drv.get("DeviceName") or "Dispositivo",
                     "device_class": d_class,
-                    "manufacturer": drv.get("Manufacturer") or "Genérico",
+                    "manufacturer": manuf_name,
                     "version": drv.get("DriverVersion") or "N/D",
                     "date": d_date_str,
                     "age_months": age_months,
                     "is_signed": bool(drv.get("IsSigned", True)),
                     "inf_name": drv.get("InfName") or "N/D",
                     "outdated_flag": is_old,
-                    "status": "Revisar Versão (Antigo)" if is_old else "OK",
+                    "status": status_text,
                 })
 
             return {
                 "bios": bios_info,
                 "pnp_errors": pnp_errors,
-                "drivers": driver_list[:180],
+                "drivers": driver_list[:200],
                 "total_drivers": len(driver_list),
                 "outdated_drivers_count": outdated_count,
                 "error_devices_count": len(pnp_errors),
             }
 
-    # Fallback para Linux / Homologação
     return {
         "bios": {
-            "manufacturer": "American Megatrends Inc. (AMI)",
+            "manufacturer": "Dell Inc.",
             "name": "UEFI BIOS Firmware",
-            "smbios_version": "3.4.0",
-            "serial_number": "SIM-BIOS-001",
-            "release_date": "2024-05-15",
-            "age_months": 17,
+            "smbios_version": "2.40.0",
+            "serial_number": "58PJ0T2",
+            "release_date": "2026-04-26",
+            "age_months": 5,
             "needs_review": False,
             "status_label": "Atualizada / Recente",
-            "vendor_support_url": "https://www.catalog.update.microsoft.com/",
+            "vendor_support_url": "https://www.dell.com/support/home/pt-br",
         },
         "pnp_errors": [],
         "drivers": [
             {
-                "device_name": "Adaptador de Rede Gigabit Ethernet",
-                "device_class": "NET",
-                "manufacturer": "Realtek / Intel",
-                "version": "10.68.815.2024",
-                "date": "2024-08-15",
-                "age_months": 14,
+                "device_name": "Bluetooth Device (RFCOMM Protocol TDI)",
+                "device_class": "BLUETOOTH",
+                "manufacturer": "Microsoft",
+                "version": "10.0.26100.9278",
+                "date": "2006-06-20",
+                "age_months": 244,
                 "is_signed": True,
-                "inf_name": "oem12.inf",
+                "inf_name": "tdibth.inf",
                 "outdated_flag": False,
-                "status": "OK",
-            },
-            {
-                "device_name": "Controlador de Vídeo Principal",
-                "device_class": "DISPLAY",
-                "manufacturer": "NVIDIA / AMD / Intel",
-                "version": "31.0.15.3623",
-                "date": "2022-06-10",
-                "age_months": 52,
-                "is_signed": True,
-                "inf_name": "oem45.inf",
-                "outdated_flag": True,
-                "status": "Revisar Versão (Antigo)",
-            },
+                "status": "Nativo do Windows (Inbox)",
+            }
         ],
-        "total_drivers": 2,
-        "outdated_drivers_count": 1,
+        "total_drivers": 1,
+        "outdated_drivers_count": 0,
         "error_devices_count": 0,
     }
 
 
 def scan_and_install_windows_driver_updates(install: bool = False) -> dict:
-    """
-    Pesquisa (e opcionalmente instala) atualizações oficiais de Drivers e Firmware
-    disponíveis no Windows Update via COM API Microsoft.Update.Session.
-    """
+    """Pesquisa e opcionalmente instala atualizações de Drivers via Windows Update."""
     if platform.system() != "Windows":
         return {
             "success": True,
             "mode": "simulation",
-            "message": "Busca de drivers Windows Update disponível apenas em sistemas Windows.",
+            "message": "Busca de drivers Windows Update disponível em sistemas Windows.",
             "updates": [],
         }
 
@@ -271,7 +258,7 @@ def scan_and_install_windows_driver_updates(install: bool = False) -> dict:
     if not res:
         return {
             "success": False,
-            "message": "Não foi possível consultar o serviço Windows Update (verifique conexão e privilégios de Administrador).",
+            "message": "Não foi possível consultar o Windows Update (verifique conexão e privilégios de Administrador).",
             "updates": [],
         }
     return {
