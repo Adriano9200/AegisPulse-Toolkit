@@ -1,0 +1,35 @@
+================================================================================
+AEGISPULSE IT TOOLKIT v1.0.0 — GUIA RÁPIDO DE CAMPO (LEIA-ME)
+Autor e Criador: Adriano Barboza (adriano9200@gmail.com)
+================================================================================
+
+1. O QUE É ESTE TOOLKIT?
+O AegisPulse IT Toolkit é sua ferramenta central de diagnóstico, inventário,
+atualização de softwares/drivers, manutenção segura e geração de laudos HTML
+com inteligência artificial (Google Gemini).
+
+2. COMO INICIAR NO COMPUTADOR DO CLIENTE:
+- Opção A (Com Python instalado): Dê duplo clique em "Iniciar_AegisPulse.bat".
+- Opção B (Sem Python no cliente): Na sua máquina principal, execute uma vez o
+  arquivo "build_exe.bat". Ele criará o arquivo portátil "dist\AegisPulse_Toolkit.exe"
+  que roda em qualquer Windows 10/11 direto do pendrive ou do G:\Meu Drive!
+
+3. SENHA / PIN DE DESBLOQUEIO PADRÃO:
+- PIN Inicial: admin123
+- Como trocar: Abra o AegisPulse, vá até a aba "IA Gemini & Config", digite seu
+  novo PIN pessoal e clique em "Salvar Configurações Locais".
+
+4. COMO ATIVAR O GEMINI AI:
+- Na aba "IA Gemini & Config", cole sua chave de API do Google AI Studio
+  (Gemini API Key) e clique em "Salvar Configurações Locais".
+- Sua chave fica salva apenas no arquivo local "config.json" e NUNCA sobe para
+  o GitHub (protegida pelo .gitignore).
+
+5. ONDE FICAM OS LOGS E LAUDOS EM HTML?
+- Todos os relatórios gerados ficam salvos automaticamente nas pastas:
+  * reports\ (Laudos prontos para imprimir em PDF ou enviar ao cliente)
+  * logs\    (Registro técnico de auditoria do atendimento)
+
+================================================================================
+Desenvolvido por Adriano Barboza — Todos os direitos reservados.
+================================================================================

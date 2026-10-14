@@ -1,0 +1,12 @@
+# ==============================================================================
+# AegisPulse IT Toolkit - Dependências Python
+# Autor: Adriano Barboza
+# ==============================================================================
+# NOTA: O AegisPulse foi projetado com arquitetura Zero-Dependency no cliente!
+# Ele roda 100% com a biblioteca padrão do Python 3.10+ (urllib, http.server,
+# subprocess, json, hashlib, platform) integrada ao PowerShell/CIM nativo.
+#
+# As bibliotecas abaixo são OPCIONAIS e usadas apenas na SUA máquina caso você
+# queira compilar o projeto em um arquivo .exe único portátil:
+pyinstaller>=6.0.0
+psutil>=5.9.0

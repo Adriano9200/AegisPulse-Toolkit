@@ -1,0 +1,12 @@
+{
+  "author": "Adriano Barboza",
+  "app_name": "AegisPulse IT Toolkit",
+  "version": "1.0.0",
+  "server_host": "127.0.0.1",
+  "server_port": 8765,
+  "require_operator_pin": true,
+  "operator_pin_sha256": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+  "operator_pin_hint": "Padrão inicial: admin123 (Altere nas configurações ou gere um novo hash SHA-256)",
+  "gemini_api_key": "COLE_SUA_GEMINI_API_KEY_AQUI",
+  "gemini_model": "gemini-2.5-flash"
+}

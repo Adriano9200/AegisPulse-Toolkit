@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<!--
+================================================================================
+PROJETO: AegisPulse IT Toolkit — Diagnostic, Maintenance & AI Suite
+ARQUIVO: frontend/index.html
+AUTOR:   Adriano Barboza (adriano9200@gmail.com)
+LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
+================================================================================
+-->
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AegisPulse IT Toolkit — Por Adriano Barboza</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- MODAL DE BLOQUEIO DO OPERADOR (RESTRIÇÃO DE USO) -->
+    <div id="authModal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-badge">ACESSO RESTRITO AO OPERADOR</div>
+            <h2>AegisPulse IT Toolkit</h2>
+            <p class="modal-sub">Desenvolvido por <strong>Adriano Barboza</strong></p>
+            <p class="modal-desc">
+                Este software é protegido contra uso não autorizado. Insira sua Chave/PIN de Operador para liberar o console de diagnóstico e manutenção.
+            </p>
+            <div class="input-group">
+                <input type="password" id="pinInput" placeholder="Digite o PIN do Técnico (Padrão: admin123)" autocomplete="off">
+                <button class="btn primary" id="btnUnlock">Desbloquear Console</button>
+            </div>
+            <p id="authError" class="error-text hidden">PIN incorreto. Acesso negado.</p>
+        </div>
+    </div>
+
+    <div class="app-layout">
+        <!-- BARRA LATERAL -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">🛡️</div>
+                <div>
+                    <h1>AegisPulse</h1>
+                    <span>IT Toolkit v1.0</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="tab-dashboard">
+                    <span>📊</span> Visão Geral & SO
+                </button>
+                <button class="nav-item" data-tab="tab-hardware">
+                    <span>🖥️</span> Hardware & Discos
+                </button>
+                <button class="nav-item" data-tab="tab-drivers">
+                    <span>⚙️</span> Drivers & BIOS
+                </button>
+                <button class="nav-item" data-tab="tab-software">
+                    <span>📦</span> Softwares & Winget
+                </button>
+                <button class="nav-item" data-tab="tab-maintenance">
+                    <span>🧰</span> Manutenção & Reparo
+                </button>
+                <button class="nav-item" data-tab="tab-gemini">
+                    <span>✨</span> IA Gemini & Config
+                </button>
+                <button class="nav-item" data-tab="tab-logs">
+                    <span>📄</span> Relatórios & Logs HTML
+                </button>
+            </nav>
+
+            <div class="author-box">
+                <div class="author-label">AUTOR & ARQUITETO</div>
+                <div class="author-name">Adriano Barboza</div>
+                <div class="author-mail">adriano9200@gmail.com</div>
+            </div>
+        </aside>
+
+        <!-- ÁREA PRINCIPAL -->
+        <main class="main-content">
+            <!-- TOPBAR -->
+            <header class="topbar">
+                <div>
+                    <h2 id="machineTitle">Carregando diagnóstico do equipamento...</h2>
+                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse inspeciona o sistema</p>
+                </div>
+                <div class="topbar-actions">
+                    <span id="netBadge" class="status-pill">Verificando Rede...</span>
+                    <button class="btn secondary" id="btnRescan">🔄 Atualizar Diagnóstico</button>
+                    <button class="btn primary" id="btnExportHtml">📄 Gerar Laudo HTML</button>
+                </div>
+            </header>
+
+            <!-- BANNER DE PROGRESSO / STATUS -->
+            <div id="statusToast" class="toast hidden"></div>
+
+            <!-- ABA 1: VISÃO GERAL & SO -->
+            <section id="tab-dashboard" class="tab-panel active">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <span class="kpi-label">FABRICANTE & MODELO</span>
+                        <strong id="kpiModel">—</strong>
+                        <small id="kpiSerial" class="muted">Serial / Tag: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">SISTEMA OPERACIONAL & BUILD</span>
+                        <strong id="kpiOS">—</strong>
+                        <small id="kpiBuild" class="muted">Build: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">PROCESSADOR & MEMÓRIA RAM</span>
+                        <strong id="kpiCpu">—</strong>
+                        <small id="kpiRam" class="muted">RAM Total: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">SAÚDE DE DRIVERS & SOFTWARES</span>
+                        <strong id="kpiAlerts">—</strong>
+                        <small id="kpiBiosStatus" class="muted">BIOS: —</small>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Detalhes do Sistema Operacional e Build</h3>
+                        <div id="osDetailsList" class="kv-list"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>Segurança, Defender & Firmware</h3>
+                        <div id="securityDetailsList" class="kv-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 2: HARDWARE & DISCOS -->
+            <section id="tab-hardware" class="tab-panel">
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Placa-Mãe, Processador e Placa de Vídeo (GPU)</h3>
+                        <div id="hwCoreList" class="kv-list"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>Módulos de Memória RAM Instalados</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Slot</th><th>Fabricante</th><th>Part Number</th><th>Capacidade</th><th>Velocidade</th></tr>
+                            </thead>
+                            <tbody id="ramTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="panel-card" style="margin-top:16px;">
+                    <h3>Unidades Físicas (SMART) e Partições Lógicas</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Unidade / Modelo</th><th>Tipo / Interface</th><th>Capacidade</th><th>Livre</th><th>Uso / Saúde SMART</th></tr>
+                        </thead>
+                        <tbody id="diskTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ABA 3: DRIVERS & BIOS -->
+            <section id="tab-drivers" class="tab-panel">
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>Diagnóstico de BIOS / UEFI e Atualização de Drivers</h3>
+                            <p class="muted">Identifica a versão/data da BIOS, dispositivos com falha no Gerenciador de Dispositivos e drivers defasados.</p>
+                        </div>
+                        <div class="btn-row">
+                            <a id="btnVendorSupport" href="#" target="_blank" class="btn secondary">🌐 Página Oficial do Fabricante (BIOS/Drivers)</a>
+                            <button class="btn secondary" id="btnScanWuDrivers">🔍 Buscar Drivers no Windows Update</button>
+                            <button class="btn primary" id="btnInstallWuDrivers">⚡ Instalar Drivers via Windows Update</button>
+                        </div>
+                    </div>
+                    <div id="biosSummaryBox" class="kv-grid" style="margin-top:14px;"></div>
+                    <div id="wuDriversResult" class="result-box hidden"></div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="flex-between" style="margin-bottom:12px;">
+                        <h3>Inventário de Drivers Instalados</h3>
+                        <input type="text" id="driverSearchInput" class="search-input" placeholder="Filtrar driver por nome, classe ou fabricante...">
+                    </div>
+                    <div class="table-scroll">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Dispositivo</th><th>Classe</th><th>Fabricante</th><th>Versão</th><th>Data</th><th>Status</th></tr>
+                            </thead>
+                            <tbody id="driversTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 4: SOFTWARES & WINGET -->
+            <section id="tab-software" class="tab-panel">
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>Softwares Obsoletos Detectados (Integração Winget)</h3>
+                            <p class="muted">Compare a versão instalada com a versão oficial mais recente e atualize em 1 clique.</p>
+                        </div>
+                        <button class="btn primary" id="btnUpgradeAllSw">🚀 Atualizar Todos os Obsoletos</button>
+                    </div>
+                    <table class="data-table" style="margin-top:12px;">
+                        <thead>
+                            <tr><th>Software</th><th>ID do Pacote</th><th>Versão Atual</th><th>Versão Nova</th><th>Ação</th></tr>
+                        </thead>
+                        <tbody id="outdatedSwTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <h3>Instalador Rápido — Kit Essencial Pós-Formatação (1-Clique)</h3>
+                    <div id="catalogGrid" class="catalog-grid"></div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="flex-between" style="margin-bottom:12px;">
+                        <h3>Inventário Completo de Softwares Instalados (<span id="swTotalCount">0</span>)</h3>
+                        <input type="text" id="swSearchInput" class="search-input" placeholder="Buscar programa instalado...">
+                    </div>
+                    <div class="table-scroll">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Nome do Programa</th><th>Versão</th><th>Fabricante</th><th>Instalação</th></tr>
+                            </thead>
+                            <tbody id="installedSwTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 5: MANUTENÇÃO & REPARO -->
+            <section id="tab-maintenance" class="tab-panel">
+                <div class="panel-card">
+                    <h3>Execução de Rotinas Seguras de Manutenção e Reparo</h3>
+                    <p class="muted" style="margin-bottom:16px;">
+                        Todas as operações seguem o protocolo de segurança do IT Commander Supremo e são registradas no Log HTML da sessão.
+                    </p>
+                    <div class="maint-grid">
+                        <div class="maint-card">
+                            <span class="badge ok">BAIXO RISCO</span>
+                            <h4>Criar Ponto de Restauração</h4>
+                            <p>Cria um ponto de restauração oficial no Windows antes de atualizar drivers ou alterar o sistema.</p>
+                            <button class="btn secondary" onclick="triggerMaintenance('create_restore_point')">Criar Checkpoint</button>
+                        </div>
+                        <div class="maint-card">
+                            <span class="badge ok">BAIXO RISCO</span>
+                            <h4>Limpeza Segura de Temporários</h4>
+                            <p>Remove arquivos órfãos em %TEMP% e Windows\Temp sem tocar em documentos ou senhas do cliente.</p>
+                            <button class="btn primary" onclick="triggerMaintenance('clean_temp')">Executar Limpeza</button>
+                        </div>
+                        <div class="maint-card">
+                            <span class="badge ok">BAIXO RISCO</span>
+                            <h4>Verificar Integridade (DISM)</h4>
+                            <p>Verifica se há corrupção na loja de componentes do Windows (DISM /CheckHealth).</p>
+                            <button class="btn secondary" onclick="triggerMaintenance('check_system_health')">Verificar Imagem</button>
+                        </div>
+                        <div class="maint-card">
+                            <span class="badge warn">RISCO MODERADO</span>
+                            <h4>Reparo Completo de Rede e DNS</h4>
+                            <p>Executa Flush DNS, Reset de catálogo Winsock e Reset da pilha TCP/IP para corrigir falhas de navegação.</p>
+                            <button class="btn secondary" onclick="triggerMaintenance('reset_network')">Reparar Rede</button>
+                        </div>
+                    </div>
+                    <pre id="maintOutputBox" class="terminal-box">Selecione uma rotina acima para visualizar o log de execução aqui...</pre>
+                </div>
+            </section>
+
+            <!-- ABA 6: IA GEMINI & CONFIG -->
+            <section id="tab-gemini" class="tab-panel">
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Assistente Inteligente Google Gemini (Online)</h3>
+                        <p class="muted" style="margin-bottom:12px;">
+                            Quando conectado à internet, o Gemini analisa todo o diagnóstico desta máquina e gera um parecer N3 para você e uma explicação simples para o seu cliente.
+                        </p>
+                        <textarea id="geminiPromptInput" rows="3" placeholder="Opcional: faça uma pergunta específica sobre este computador (ou deixe em branco para gerar o Diagnóstico Completo + Laudo para o Cliente)..."></textarea>
+                        <div style="margin-top:10px;">
+                            <button class="btn primary" id="btnAskGemini">✨ Analisar Computador com Gemini AI</button>
+                        </div>
+                        <pre id="geminiOutputBox" class="terminal-box" style="min-height:240px;margin-top:14px;">Clique em "Analisar Computador com Gemini AI" para gerar o parecer inteligente...</pre>
+                    </div>
+
+                    <div class="panel-card">
+                        <h3>Configurações do Operador & Segurança</h3>
+                        <p class="muted" style="margin-bottom:12px;">
+                            Suas chaves ficam salvas apenas no arquivo local <code>config.json</code> (ignorado pelo Git para nunca vazar no GitHub).
+                        </p>
+                        <label class="field-label">Google Gemini API Key</label>
+                        <input type="password" id="cfgGeminiKey" class="full-input" placeholder="AIzaSy...">
+
+                        <label class="field-label" style="margin-top:12px;">Alterar PIN/Senha de Operador (Adriano Barboza)</label>
+                        <input type="password" id="cfgNewPin" class="full-input" placeholder="Nova senha de desbloqueio do Toolkit">
+
+                        <button class="btn primary" id="btnSaveConfig" style="margin-top:16px;">💾 Salvar Configurações Locais</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 7: RELATÓRIOS & LOGS HTML -->
+            <section id="tab-logs" class="tab-panel">
+                <div class="panel-card">
+                    <div class="flex-between">
+                        <div>
+                            <h3>Logs de Auditoria da Sessão & Exportação de Laudo HTML</h3>
+                            <p class="muted">Exporte um laudo técnico visual completo em HTML (pronto para enviar ao cliente ou salvar em PDF).</p>
+                        </div>
+                        <button class="btn primary" onclick="exportHtmlReport()">📄 Gerar e Abrir Relatório HTML Agora</button>
+                    </div>
+                    <table class="data-table" style="margin-top:14px;">
+                        <thead>
+                            <tr><th>Horário</th><th>Operação</th><th>Resumo Técnico</th></tr>
+                        </thead>
+                        <tbody id="sessionLogsTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
