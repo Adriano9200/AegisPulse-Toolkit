@@ -1,4 +1,7 @@
-# 🛡️ AegisPulse IT Toolkit — Diagnostic, Maintenance & AI Suite
+# 🛡️ AegisPulse IT Toolkit
+### Diagnóstico • Automação • Inteligência
+> **Tecnologia sob controle. Suporte com inteligência.**  
+> *Desenvolvido por Adriano Barboza (`adriano9200@gmail.com`)*
 
 **Autor e Criador:** Adriano Barboza (`adriano9200@gmail.com`)  
 **Versão:** 1.0.0  

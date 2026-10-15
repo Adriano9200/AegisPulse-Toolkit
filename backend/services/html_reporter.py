@@ -224,7 +224,8 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
 <div class="container">
     <div class="header">
         <div>
-            <h1>AEGISPULSE IT TOOLKIT — RELATÓRIO E LOG DE DIAGNÓSTICO</h1>
+            <h1>AEGISPULSE IT TOOLKIT — DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</h1>
+            <p style="color:#38bdf8;font-weight:600;margin-bottom:4px;">Tecnologia sob controle. Suporte com inteligência.</p>
             <p>Responsável Técnico / Autor do Toolkit: <strong>Adriano Barboza</strong> (adriano9200@gmail.com)</p>
             <p>Data/Hora da Coleta: {now_str} | Hostname: <strong>{hostname}</strong></p>
         </div>
@@ -307,7 +308,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
     {ai_block}
 
     <div class="footer">
-        Relatório gerado automaticamente pelo <strong>AegisPulse IT Toolkit v1.0.0</strong> • Desenvolvido por <strong>Adriano Barboza</strong> (adriano9200@gmail.com)
+        <strong>AegisPulse IT Toolkit v1.1.0</strong> — Diagnóstico • Automação • Inteligência | <em>Tecnologia sob controle. Suporte com inteligência.</em> • Desenvolvido por <strong>Adriano Barboza</strong> (adriano9200@gmail.com)
     </div>
 </div>
 </body>
