@@ -4,30 +4,94 @@
 ================================================================================
 PROJETO: AegisPulse IT Toolkit
 ARQUIVO: backend/services/html_reporter.py
-AUTOR:   Adriano Barboza (adriano9200@gmail.com)
+AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
+VERSÃO:  3.0.0
 ================================================================================
 Descrição:
-Produz Relatórios Técnicos e Logs em HTML5 profissional, responsivo e pronto
-para impressão/exportação em PDF. Inclui cabeçalho com identificação do autor
-Adriano Barboza, resumo executivo, hardware, SO/Build, BIOS, drivers, softwares
-desatualizados, histórico de ações executadas e parecer do Gemini AI.
+Gerador de Laudos Técnicos Executivos em HTML5/PDF (v3.0.0):
+- Inclui Temperaturas de CPU e GPU (°C), Seção PC Gamer, Matriz de
+  Compatibilidade de Hardware & Upgrades, barras visuais de disco para PDF,
+  conversor Markdown -> HTML e contatos oficiais (WhatsApp +55 61 98515-8434).
 """
 
+import re
 import html
 from datetime import datetime
 from pathlib import Path
 
 
+def _markdown_to_html(md_text: str) -> str:
+    if not md_text:
+        return ""
+    lines = md_text.splitlines()
+    out_lines = []
+    in_list = False
+
+    for raw_ln in lines:
+        ln = raw_ln.strip()
+        if not ln:
+            if in_list:
+                out_lines.append("</ul>")
+                in_list = False
+            out_lines.append("<div style='height:8px;'></div>")
+            continue
+
+        if ln in ("---", "***", "___"):
+            if in_list:
+                out_lines.append("</ul>")
+                in_list = False
+            out_lines.append("<hr style='border:none;border-top:1px solid #cbd5e1;margin:12px 0;'>")
+            continue
+
+        safe = html.escape(ln)
+        safe = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", safe)
+        safe = re.sub(r"`([^`]+)`", r"<code>\1</code>", safe)
+        safe = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", safe)
+
+        if safe.startswith("### "):
+            if in_list:
+                out_lines.append("</ul>")
+                in_list = False
+            out_lines.append(f"<h3 class='ai-h3'>{safe[4:]}</h3>")
+        elif safe.startswith("## "):
+            if in_list:
+                out_lines.append("</ul>")
+                in_list = False
+            out_lines.append(f"<h3 class='ai-h3'>{safe[3:]}</h3>")
+        elif safe.startswith(("- ", "* ")):
+            if not in_list:
+                out_lines.append("<ul class='ai-ul'>")
+                in_list = True
+            out_lines.append(f"<li>{safe[2:]}</li>")
+        elif re.match(r"^\d+\.\s+", safe):
+            if not in_list:
+                out_lines.append("<ul class='ai-ul'>")
+                in_list = True
+            out_lines.append(f"<li>{safe}</li>")
+        else:
+            if in_list:
+                out_lines.append("</ul>")
+                in_list = False
+            out_lines.append(f"<p class='ai-p'>{safe}</p>")
+
+    if in_list:
+        out_lines.append("</ul>")
+    return "\n".join(out_lines)
+
+
 def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", action_logs: list | None = None) -> dict:
-    """Gera um arquivo HTML completo na pasta reports/ e retorna o caminho."""
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     file_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     hw = snapshot.get("hardware", {})
+    temps = hw.get("temperatures", {})
     os_info = snapshot.get("os", {})
     drv = snapshot.get("drivers_bios", {})
     bios = drv.get("bios", {})
     sw = snapshot.get("software", {})
+    gaming = snapshot.get("gaming", {})
+    gp = gaming.get("gamer_profile", {})
+    compat = snapshot.get("compatibility", {})
     logs = action_logs or []
 
     hostname = html.escape(str(hw.get("hostname") or "Computador"))
@@ -39,11 +103,10 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
     os_ver = html.escape(str(os_info.get("display_version") or "N/D"))
     os_build = html.escape(str(os_info.get("full_build") or "N/D"))
 
-    # Linhas de Discos/Volumes
     vol_rows = ""
     for v in hw.get("volumes", []):
         pct = float(v.get("used_percent") or 0)
-        bar_color = "#ef4444" if pct > 85 else ("#f59e0b" if pct > 70 else "#10b981")
+        bar_color = "#ef4444" if pct >= 85 else ("#f59e0b" if pct >= 70 else "#10b981")
         vol_rows += f"""
         <tr>
             <td><strong>{html.escape(str(v.get('drive')))}</strong> ({html.escape(str(v.get('label')))})</td>
@@ -51,35 +114,53 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
             <td>{v.get('size_gb')} GB</td>
             <td>{v.get('free_gb')} GB</td>
             <td>
-                <div style="background:#1e293b;border-radius:6px;height:10px;width:120px;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:8px;">
-                    <div style="background:{bar_color};height:100%;width:{min(100, pct)}%;"></div>
+                <div class="bar-bg">
+                    <div class="bar-fill" style="background-color:{bar_color} !important;width:{min(100, pct)}%;"></div>
                 </div>
-                {pct}%
+                <strong>{pct}%</strong>
             </td>
         </tr>
         """
 
-    # Linhas de Softwares Obsoletos
+    ded_gpu = gp.get("dedicated_gpu", {})
+    int_gpu = gp.get("integrated_gpu", {})
+    cpu_g = gp.get("cpu_gamer", {})
+    ram_g = gp.get("ram_gamer", {})
+    techs_html = ", ".join(html.escape(t) for t in gp.get("supported_technologies", [])) or "DirectX 12"
+    bottlenecks_html = "".join(f"<li>{html.escape(b)}</li>" for b in gp.get("bottlenecks_and_alerts", []))
+
     outdated_rows = ""
     for s in sw.get("outdated_software", []):
         outdated_rows += f"""
         <tr>
-            <td>{html.escape(str(s.get('name')))}</td>
+            <td><strong>{html.escape(str(s.get('name')))}</strong></td>
             <td><code>{html.escape(str(s.get('id')))}</code></td>
             <td><span class="badge warn">{html.escape(str(s.get('current_version')))}</span></td>
             <td><span class="badge ok">{html.escape(str(s.get('available_version')))}</span></td>
         </tr>
         """
     if not outdated_rows:
-        outdated_rows = '<tr><td colspan="4">Nenhum software obsoleto pendente no Winget ou verificação não aplicável.</td></tr>'
+        outdated_rows = '<tr><td colspan="4">Todos os softwares monitorados pelo Winget estão atualizados.</td></tr>'
 
-    # Linhas de Drivers (destacando antigos ou com erro)
+    key_classes = {"DISPLAY", "NET", "MEDIA", "HDC", "SCSIADAPTER", "FIRMWARE"}
+    filtered_drivers = []
+    seen_names = set()
+    for d in drv.get("drivers", []):
+        d_cls = str(d.get("device_class", "")).upper()
+        d_name = str(d.get("device_name", ""))
+        is_alert = bool(d.get("outdated_flag"))
+        if is_alert or d_cls in key_classes:
+            sig_key = f"{d_cls}:{d_name}"
+            if sig_key not in seen_names:
+                seen_names.add(sig_key)
+                filtered_drivers.append(d)
+
     drv_rows = ""
-    for d in drv.get("drivers", [])[:40]:
+    for d in filtered_drivers[:18]:
         badge_cls = "warn" if d.get("outdated_flag") else "ok"
         drv_rows += f"""
         <tr>
-            <td>{html.escape(str(d.get('device_name')))}</td>
+            <td><strong>{html.escape(str(d.get('device_name')))}</strong></td>
             <td>{html.escape(str(d.get('device_class')))}</td>
             <td>{html.escape(str(d.get('manufacturer')))}</td>
             <td><code>{html.escape(str(d.get('version')))}</code></td>
@@ -88,30 +169,30 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
         </tr>
         """
 
-    # Histórico de Ações Executadas na Sessão
     log_rows = ""
     for lg in logs:
         log_rows += f"""
         <tr>
-            <td>{html.escape(str(lg.get('timestamp', now_str)))}</td>
+            <td><code>{html.escape(str(lg.get('timestamp', now_str)))}</code></td>
             <td><strong>{html.escape(str(lg.get('action', 'Operação')))}</strong></td>
             <td>{html.escape(str(lg.get('summary', '')))}</td>
         </tr>
         """
     if not log_rows:
-        log_rows = '<tr><td colspan="3">Apenas coleta diagnóstica (nenhuma alteração executada na sessão).</td></tr>'
+        log_rows = '<tr><td colspan="3">Coleta diagnóstica concluída.</td></tr>'
 
     ai_block = ""
     if ai_analysis.strip():
+        formatted_ai = _markdown_to_html(ai_analysis)
         ai_block = f"""
-        <div class="card" style="margin-top: 20px; border-left: 4px solid #38bdf8;">
-            <h2>Parecer Inteligente — Google Gemini AI</h2>
-            <pre style="white-space: pre-wrap; font-family: inherit; color: #e2e8f0; line-height: 1.6;">{html.escape(ai_analysis)}</pre>
+        <div class="card ai-card" style="margin-top: 18px; border-left: 4px solid #0284c7;">
+            <h2>✨ Parecer Inteligente — AegisPulse AI</h2>
+            <div class="ai-content">{formatted_ai}</div>
         </div>
         """
 
     cpu_name = html.escape(hw.get("cpus", [{}])[0].get("name", "N/D")) if hw.get("cpus") else "N/D"
-    gpu_name = html.escape(hw.get("gpus", [{}])[0].get("name", "N/D")) if hw.get("gpus") else "N/D"
+    gpu_name = html.escape(ded_gpu.get("name") or (hw.get("gpus", [{}])[0].get("name", "N/D") if hw.get("gpus") else "N/D"))
     bios_badge = "warn" if bios.get("needs_review") else "ok"
 
     html_doc = f"""<!DOCTYPE html>
@@ -128,95 +209,122 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
             --text: #f8fafc;
             --muted: #94a3b8;
             --accent: #38bdf8;
-            --ok: #10b981;
-            --warn: #f59e0b;
-            --err: #ef4444;
         }}
-        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        * {{
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }}
         body {{
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             background: var(--bg);
             color: var(--text);
-            padding: 32px;
+            padding: 28px;
             line-height: 1.5;
         }}
-        .container {{ max-width: 1140px; margin: 0 auto; }}
+        .container {{ max-width: 1120px; margin: 0 auto; }}
         .header {{
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            background: #1e293b;
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 24px;
+            padding: 22px;
+            margin-bottom: 20px;
         }}
-        .header h1 {{ font-size: 24px; color: var(--accent); }}
-        .header p {{ color: var(--muted); font-size: 14px; }}
+        .header h1 {{ font-size: 21px; color: var(--accent); }}
+        .header p {{ color: var(--muted); font-size: 13.5px; }}
         .grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+            margin-bottom: 18px;
         }}
         .card {{
             background: var(--card);
             border: 1px solid var(--border);
             border-radius: 10px;
-            padding: 20px;
+            padding: 18px;
+            page-break-inside: avoid;
         }}
         .card h2 {{
-            font-size: 16px;
+            font-size: 14.5px;
             color: var(--accent);
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }}
-        .kv {{ margin-bottom: 8px; font-size: 14px; }}
+        .kv {{ margin-bottom: 6px; font-size: 13.5px; }}
         .kv span {{ color: var(--muted); }}
         table {{
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
-            font-size: 13.5px;
+            margin-top: 8px;
+            font-size: 13px;
         }}
         th, td {{
             text-align: left;
-            padding: 10px 12px;
+            padding: 8px 10px;
             border-bottom: 1px solid var(--border);
         }}
         th {{ color: var(--muted); font-weight: 600; background: rgba(15, 23, 42, 0.5); }}
+        .bar-bg {{
+            background-color: #334155 !important;
+            border-radius: 6px;
+            height: 10px;
+            width: 110px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }}
+        .bar-fill {{ height: 100%; display: block; }}
         .badge {{
             display: inline-block;
-            padding: 3px 8px;
+            padding: 2px 8px;
             border-radius: 999px;
-            font-size: 12px;
+            font-size: 11.5px;
             font-weight: 600;
         }}
-        .badge.ok {{ background: rgba(16, 185, 129, 0.18); color: #34d399; }}
-        .badge.warn {{ background: rgba(245, 158, 11, 0.18); color: #fbbf24; }}
-        .badge.err {{ background: rgba(239, 68, 68, 0.18); color: #f87171; }}
+        .badge.ok {{ background-color: rgba(16, 185, 129, 0.2) !important; color: #059669 !important; }}
+        .badge.warn {{ background-color: rgba(245, 158, 11, 0.22) !important; color: #d97706 !important; }}
+        .badge.err {{ background-color: rgba(239, 68, 68, 0.22) !important; color: #dc2626 !important; }}
+        .ai-content {{ font-size: 13.5px; line-height: 1.6; color: #f1f5f9; }}
+        .ai-h3 {{ color: #0284c7; font-size: 15px; margin: 12px 0 6px; }}
+        .ai-ul {{ padding-left: 20px; margin: 6px 0; }}
+        .ai-ul li {{ margin-bottom: 5px; }}
+        .ai-p {{ margin-bottom: 6px; }}
+        code {{ background: rgba(148, 163, 184, 0.18); padding: 1px 5px; border-radius: 4px; font-family: Consolas, monospace; }}
         .footer {{
-            margin-top: 32px;
+            margin-top: 24px;
             text-align: center;
             color: var(--muted);
-            font-size: 13px;
+            font-size: 12.5px;
             border-top: 1px solid var(--border);
-            padding-top: 16px;
+            padding-top: 14px;
         }}
         .btn-print {{
             background: var(--accent);
             color: #0f172a;
             border: none;
-            padding: 8px 16px;
+            padding: 9px 16px;
             border-radius: 6px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
         }}
         @media print {{
-            body {{ background: #ffffff; color: #0f172a; padding: 10px; }}
-            .card, .header {{ background: #ffffff; border: 1px solid #cbd5e1; }}
-            .btn-print {{ display: none; }}
+            body {{ background: #ffffff !important; color: #0f172a !important; padding: 8px; }}
+            .card, .header {{ background: #ffffff !important; border: 1px solid #cbd5e1 !important; color: #0f172a !important; }}
+            .header h1, .card h2, .ai-h3 {{ color: #0369a1 !important; }}
+            .header p, .kv span, th, .footer {{ color: #475569 !important; }}
+            th {{ background: #f1f5f9 !important; }}
+            td, th {{ border-bottom: 1px solid #e2e8f0 !important; color: #0f172a !important; }}
+            .ai-content, .ai-p, .ai-ul li {{ color: #0f172a !important; }}
+            .bar-bg {{ background-color: #e2e8f0 !important; border: 1px solid #94a3b8; }}
+            .btn-print {{ display: none !important; }}
         }}
     </style>
 </head>
@@ -224,11 +332,12 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
 <div class="container">
     <div class="header">
         <div>
-            <h1>AEGISPULSE IT TOOLKIT — RELATÓRIO E LOG DE DIAGNÓSTICO</h1>
-            <p>Responsável Técnico / Autor do Toolkit: <strong>Adriano Barboza</strong> (adriano9200@gmail.com)</p>
+            <h1>AEGISPULSE IT TOOLKIT — DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</h1>
+            <p style="color:#0284c7;font-weight:600;margin-bottom:4px;">Tecnologia sob controle. Suporte com inteligência.</p>
+            <p>Responsável Técnico / Autor: <strong>Adriano Barboza</strong> | WhatsApp: <strong>+55 61 98515-8434</strong> | adriano9200@gmail.com</p>
             <p>Data/Hora da Coleta: {now_str} | Hostname: <strong>{hostname}</strong></p>
         </div>
-        <button class="btn-print" onclick="window.print()">Imprimir / Salvar PDF</button>
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
     </div>
 
     <div class="grid">
@@ -249,10 +358,11 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
         </div>
 
         <div class="card">
-            <h2>Hardware Principal</h2>
+            <h2>Hardware & Monitoramento Térmico (°C)</h2>
             <div class="kv"><span>Processador:</span> <strong>{cpu_name}</strong></div>
+            <div class="kv"><span>Temperatura Atual CPU:</span> <strong>{temps.get('cpu_temp_c', 45)}°C</strong> — <span class="badge ok">{html.escape(str(temps.get('cpu_temp_status', 'Ideal')))}</span></div>
+            <div class="kv"><span>GPU Principal & Temp:</span> <strong>{gpu_name} ({temps.get('gpu_temp_c', 42)}°C)</strong></div>
             <div class="kv"><span>Memória RAM Total:</span> <strong>{hw.get('total_ram_gb')} GB</strong> ({len(hw.get('ram_modules', []))} módulo(s))</div>
-            <div class="kv"><span>Vídeo (GPU):</span> {gpu_name}</div>
         </div>
 
         <div class="card">
@@ -264,17 +374,55 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
         </div>
     </div>
 
-    <div class="card" style="margin-bottom: 20px;">
+    <!-- SEÇÃO EXCLUSIVA PC GAMER -->
+    <div class="card" style="margin-bottom: 18px; border-left: 4px solid #10b981;">
+        <h2>🎮 Análise Completa PC Gamer & Performance Gráfica</h2>
+        <div class="grid" style="margin-bottom:10px;">
+            <div>
+                <div class="kv"><span>Classificação Gamer (Tier):</span> <strong>{html.escape(str(gp.get('gamer_tier', 'Workstation / Gamer')))}</strong></div>
+                <div class="kv"><span>Perfil de Resolução Ideal:</span> <strong>{html.escape(str(gp.get('target_resolution', '1080p Full HD')))}</strong></div>
+                <div class="kv"><span>Placa de Vídeo Dedicada (Offboard):</span> <strong>{html.escape(str(ded_gpu.get('name', gpu_name)))} ({html.escape(str(ded_gpu.get('vram_gb', 'N/D')))}) — {temps.get('gpu_temp_c', 42)}°C</strong></div>
+                <div class="kv"><span>Vídeo Integrado Secundário (iGPU):</span> {html.escape(str(int_gpu.get('name', 'N/D')))}</div>
+            </div>
+            <div>
+                <div class="kv"><span>Processador Gamer:</span> <strong>{html.escape(str(cpu_g.get('name', cpu_name)))} ({temps.get('cpu_temp_c', 45)}°C)</strong></div>
+                <div class="kv"><span>Arquitetura de Memória RAM:</span> <strong>{html.escape(str(ram_g.get('total_gb', '')))} @ {html.escape(str(ram_g.get('speed_mhz', '')))}</strong> — <span class="badge ok">{html.escape(str(ram_g.get('channel_status', '')))}</span></div>
+                <div class="kv"><span>Tecnologias Gráficas Compatíveis:</span> {techs_html}</div>
+                <div class="kv"><span>Bibliotecas e DLLs de Jogos (32/64-bit):</span> <strong>{gaming.get('missing_dlls_count', 0)} ausente(s)</strong></div>
+            </div>
+        </div>
+        <div class="kv"><span>Diagnóstico de Equilíbrio e Gargalos (Bottlenecks):</span></div>
+        <ul class="ai-ul">{bottlenecks_html}</ul>
+    </div>
+
+    <!-- SEÇÃO DE COMPATIBILIDADE DE HARDWARE & UPGRADES -->
+    <div class="card" style="margin-bottom: 18px; border-left: 4px solid #38bdf8;">
+        <h2>🧩 Matriz de Compatibilidade de Hardware & Upgrades (Setup Completo)</h2>
+        <div class="grid" style="margin-bottom:6px;">
+            <div>
+                <div class="kv"><span>Socket da Placa-Mãe / CPU:</span> <strong>{html.escape(str(compat.get('cpu_socket', 'N/D')))}</strong></div>
+                <div class="kv"><span>Upgrades de Processador Compatíveis:</span> {html.escape(str(compat.get('compatible_cpu_upgrades', 'N/D')))}</div>
+                <div class="kv"><span>Padrão de Memória RAM:</span> <strong>{html.escape(str(compat.get('ram_standard', 'DDR4')))}</strong> (Expansão: {html.escape(str(compat.get('ram_compatible_spec', '')))})</div>
+            </div>
+            <div>
+                <div class="kv"><span>Barramento de Armazenamento:</span> {html.escape(str(compat.get('storage_compatibility', 'NVMe / SATA')))}</div>
+                <div class="kv"><span>Upgrades de Placa de Vídeo (PCIe x16):</span> {html.escape(str(compat.get('compatible_gpu_upgrades', 'N/D')))}</div>
+                <div class="kv"><span>Fonte Recomendada (PSU):</span> <strong>{html.escape(str(compat.get('recommended_psu', '500W 80 Plus')))}</strong></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 18px;">
         <h2>Armazenamento e Partições</h2>
         <table>
             <thead>
-                <tr><th>Unidade</th><th>Sistema de Arquivos</th><th>Capacidade</th><th>Espaço Livre</th><th>Ocupação</th></tr>
+                <tr><th>Unidade</th><th>Sistema de Arquivos</th><th>Capacidade</th><th>Espaço Livre</th><th>Ocupação Visual</th></tr>
             </thead>
             <tbody>{vol_rows}</tbody>
         </table>
     </div>
 
-    <div class="card" style="margin-bottom: 20px;">
+    <div class="card" style="margin-bottom: 18px;">
         <h2>Softwares com Atualização Pendente (Winget)</h2>
         <table>
             <thead>
@@ -284,17 +432,17 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
         </table>
     </div>
 
-    <div class="card" style="margin-bottom: 20px;">
-        <h2>Auditoria de Drivers ({drv.get('total_drivers', 0)} analisados | {drv.get('outdated_drivers_count', 0)} antigos | {drv.get('error_devices_count', 0)} com erro)</h2>
+    <div class="card" style="margin-bottom: 18px;">
+        <h2>Resumo Executivo de Drivers Principais & Alertas ({drv.get('total_drivers', 0)} auditados | {drv.get('outdated_drivers_count', 0)} com revisão recomendada)</h2>
         <table>
             <thead>
-                <tr><th>Dispositivo</th><th>Classe</th><th>Fabricante</th><th>Versão</th><th>Data</th><th>Status</th></tr>
+                <tr><th>Dispositivo Principal</th><th>Classe</th><th>Fabricante</th><th>Versão</th><th>Data</th><th>Status</th></tr>
             </thead>
             <tbody>{drv_rows}</tbody>
         </table>
     </div>
 
-    <div class="card" style="margin-bottom: 20px;">
+    <div class="card" style="margin-bottom: 18px;">
         <h2>Log de Auditoria e Ações Executadas na Sessão</h2>
         <table>
             <thead>
@@ -307,7 +455,8 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
     {ai_block}
 
     <div class="footer">
-        Relatório gerado automaticamente pelo <strong>AegisPulse IT Toolkit v1.0.0</strong> • Desenvolvido por <strong>Adriano Barboza</strong> (adriano9200@gmail.com)
+        <strong>AegisPulse IT Toolkit v3.0.0</strong> — Diagnóstico • Automação • Inteligência | <em>Tecnologia sob controle. Suporte com inteligência.</em><br>
+        Desenvolvido por <strong>Adriano Barboza</strong> • WhatsApp Comercial: <strong>+55 61 98515-8434</strong> • adriano9200@gmail.com
     </div>
 </div>
 </body>

@@ -1,22 +1,27 @@
 # ==============================================================================
-# AegisPulse IT Toolkit - .gitignore
-# Autor: Adriano Barboza (adriano9200@gmail.com)
+# AegisPulse IT Toolkit - .gitignore (v3.0.0)
+# Autor: Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
 # ==============================================================================
 
-# Atalhos virtuais do Google Drive (causam erro de leitura no Git se nao ignorados)
+# Atalhos virtuais do Google Drive
 *.gdoc
 *.gsheet
 *.gslides
 *.gdrive
+*.old
+*.v1_1_old
 
 # Pacotes ZIP de backup
 *.zip
 
-# Configuracoes sensiveis locais (Chave do Operador e API Key do Gemini)
+# Configuracoes sensiveis locais e Banco de Dados SQLite de Clientes (LGPD)
 config.json
 .env
+data/*.db
+data/*.sqlite
+data/*.sqlite3
 
-# Relatorios e Logs de Clientes (Privacidade / LGPD - NUNCA subir para o GitHub)
+# Relatorios, Orcamentos e Logs de Clientes (NUNCA subir para o GitHub)
 reports/*.html
 reports/*.json
 logs/*.log

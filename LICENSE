@@ -1,30 +1,50 @@
 PROPRIETARY SOFTWARE LICENSE — ALL RIGHTS RESERVED
 ================================================================================
-AegisPulse IT Toolkit — Diagnostic, Maintenance & AI Suite
-Copyright (c) 2026 Adriano Barboza (adriano9200@gmail.com).
+AegisPulse IT Toolkit v3.0.0 — Diagnóstico • Automação • Inteligência
+"Tecnologia sob controle. Suporte com inteligência."
+
+Copyright (c) 2026 Adriano Barboza
+WhatsApp Comercial: +55 61 98515-8434
+E-mail: adriano9200@gmail.com
+Repositório Oficial: https://github.com/Adriano9200/AegisPulse-Toolkit
 Todos os direitos reservados.
-
-1. PROPRIEDADE INTELECTUAL
-Este software, incluindo todo o seu código-fonte, arquitetura de backend,
-interface gráfica (UI/UX), scripts de automação, relatórios e documentação
-associada, é de propriedade exclusiva de ADRIANO BARBOZA.
-
-2. RESTRIÇÕES DE USO E DISTRIBUIÇÃO
-A visualização pública deste repositório no GitHub tem finalidade exclusivamente
-de portfólio técnico e controle de versão do autor.
-NÃO É PERMITIDO a terceiros, sem autorização prévia e por escrito do autor:
-a) Utilizar este software comercialmente em atendimentos técnicos ou empresas;
-b) Copiar, modificar, fazer fork para distribuição ou criar obras derivadas;
-c) Redistribuir binários, instaladores ou scripts deste projeto;
-d) Remover ou alterar os avisos de autoria e direitos autorais em qualquer arquivo.
-
-3. CONTROLE DE ACESSO TÉCNICO
-A execução das funções operacionais deste software é protegida por chave de
-autenticação de operador (Operator PIN/Key) exclusiva do autor.
-
-4. ISENÇÃO DE GARANTIA
-Este software é fornecido "no estado em que se encontra" (AS IS), para uso
-profissional pelo autor devidamente credenciado.
 ================================================================================
-Autor: Adriano Barboza
-Contato: adriano9200@gmail.com
+
+1. TITULARIDADE E PROPRIEDADE INTELECTUAL
+Este software, incluindo toda a sua arquitetura de backend, coletores de
+telemetria, banco de dados CRM, motores de análise PC Gamer e compatibilidade,
+interface gráfica (UI/UX), scripts de automação, gerador de licenças e
+documentação associada, é propriedade intelectual exclusiva de ADRIANO BARBOZA,
+protegido pela Lei do Software (Lei nº 9.609/1998) e pela Lei de Direitos
+Autorais (Lei nº 9.610/1998).
+
+2. FINALIDADE DA EXIBIÇÃO NO GITHUB (CÓDIGO VISÍVEL, NÃO LIVRE)
+A disponibilização pública da estrutura deste projeto no GitHub destina-se
+exclusivamente para fins de portfólio profissional, demonstração arquitetural e
+controle de versão do autor. Este software NÃO é de código aberto (não possui
+licença MIT, Apache ou GPL).
+
+3. MODO DE AVALIAÇÃO (TRIAL) E LICENCIAMENTO COMERCIAL (PRO)
+- O uso em Modo Trial é limitado estritamente a 4 (quatro) análises gratuitas
+  de avaliação por equipamento com IA Local.
+- O uso contínuo, profissional ou comercial, bem como o acesso aos motores de
+  IA em nuvem (Google Gemini e xAI Grok), exige a aquisição de uma Chave de
+  Assinatura oficial (AEGIS-PRO-...) emitida diretamente pelo autor Adriano
+  Barboza através do WhatsApp +55 61 98515-8434.
+
+4. PROIBIÇÕES EXPRESSAS
+Sem autorização prévia, expressa e por escrito de Adriano Barboza, é
+estritamente proibido a qualquer pessoa física ou jurídica:
+a) Copiar, clonar, distribuir, vender, alugar ou sublicenciar este software;
+b) Modificar o código-fonte para burlar, desativar ou remover o limite do Modo
+   Trial, a validação de chaves HMAC-SHA256 ou a autenticação de Administrador;
+c) Remover ou ocultar o nome, e-mail ou WhatsApp (+55 61 98515-8434) do autor
+   Adriano Barboza de qualquer tela, cabeçalho de código ou relatório HTML/PDF;
+d) Criar obras derivadas ou compilar executáveis a partir deste código sem
+   licença comercial ativa.
+
+5. ISENÇÃO DE GARANTIA
+Este software é fornecido "no estado em que se encontra" (AS IS), sendo operado
+sob responsabilidade do profissional licenciado.
+================================================================================
+Autor e Licenciante: Adriano Barboza | WhatsApp: +55 61 98515-8434
