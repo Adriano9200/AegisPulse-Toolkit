@@ -1,5 +1,5 @@
 ================================================================================
-🛡️ AEGISPULSE IT TOOLKIT — v4.0.0 (ENTERPRISE STORAGE FORENSICS, CRM & MULTI-IA)
+🛡️ AEGISPULSE IT TOOLKIT — v4.5.0 (ENTERPRISE STORAGE FORENSICS, CRM & MULTI-IA)
    Diagnóstico • Automação • Inteligência
    "Tecnologia sob controle. Suporte com inteligência."
    Desenvolvido por: Adriano Barboza (adriano9200@gmail.com)
@@ -20,7 +20,7 @@
    - MODO ADMINISTRADOR MASTER (Exclusivo Adriano Barboza): Libera CRM SQLite
      de Clientes, Tabela de Preços Justos, Orçamento Exclusivo e Keygen.
 
-3. NOVO MÓDULO v4.0.0 — DISCOS, SMART, VIDA ÚTIL & RECUPERAÇÃO ASSISTIDA:
+3. NOVO MÓDULO v4.5.0 — DISCOS, SMART, VIDA ÚTIL & RECUPERAÇÃO ASSISTIDA:
    - Inventário avançado de HDDs, SSDs SATA, SSDs NVMe, Pendrives e Externos USB
      com capacidade em Bytes, GB/TB (Decimal) e GiB/TiB (Binário).
    - Leitura SMART profunda, horas ligadas (POH em horas e dias), TBW, desgaste

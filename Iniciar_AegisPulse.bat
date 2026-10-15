@@ -1,47 +1,45 @@
 @echo off
-title AegisPulse IT Toolkit - Por Adriano Barboza
-color 0B
+chcp 65001 >nul
+title AegisPulse IT Toolkit v4.5 - Por Adriano Barboza
+cd /d "%~dp0"
 
 echo ============================================================================
-echo    AEGISPULSE IT TOOLKIT v4.5 - DIAGNOSTIC, HEALTH SCORE ^& AI SUITE
-echo    Autor: Adriano Barboza (adriano9200@gmail.com)
-echo    WhatsApp Comercial: +55 61 98515-8434
+echo   AEGISPULSE IT TOOLKIT v4.5 (Health Score + Storage Forensics + Multi-IA)
+echo   Desenvolvido por Adriano Barboza ^| WhatsApp: +55 61 98515-8434
 echo ============================================================================
 echo.
 
-cd /d "%~dp0"
-
-:: 1. Verifica privilégios de Administrador (opcional, continua normalmente se não elevado)
-net session >nul 2>&1
-if %errorLevel% == 0 (
-    echo [OK] Executando com privilegios de Administrador.
-) else (
-    echo [INFO] Dica: Para leitura fisica SMART e reparos avancados,
-    echo        recomenda-se clicar com o botao direito e "Executar como Administrador".
+REM 1. Mata qualquer instancia anterior presa na porta 8765 para garantir que a nova versao suba limpa
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8765 ^| findstr LISTENING') do (
+    echo [INFO] Encerrando instancia anterior na porta 8765 (PID: %%a)...
+    taskkill /F /PID %%a >nul 2>&1
 )
 
-:: 2. Verifica se o Python esta instalado
-python --version >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [ERRO] Python 3 nao encontrado no PATH deste computador.
-    echo Instale o Python pelo site oficial python.org ou via winget: winget install Python.Python.3.12
+REM 2. Verifica se o Python esta disponivel
+where python >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERRO] Python nao encontrado no PATH do Windows!
+    echo Instale o Python 3.10+ em https://www.python.org/ e marque "Add Python to PATH".
     pause
     exit /b 1
 )
 
-:: 3. Encerra processos orfaos que possam estar prendendo a porta 8765
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8765 ^| findstr LISTENING') do (
-    echo [AVISO] Liberando porta 8765 ocupada pelo processo PID %%a...
-    taskkill /f /pid %%a >nul 2>&1
+REM 3. Garante que o psutil esteja instalado
+python -c "import psutil" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [INFO] Instalando dependencia obrigatoria (psutil)...
+    python -m pip install psutil --quiet
 )
 
-:: 4. Abre o navegador na URL do AegisPulse apos 2 segundos
-start "" cmd /c "timeout /t 2 /nobreak >nul & start http://127.0.0.1:8765"
+echo [OK] Iniciando servidor local em http://127.0.0.1:8765 (Janela Propria App)...
+echo [DICA] Senhas Master ADM aceitas: Luna@19102023 ^| Luna@10192023 ^| admin123
+echo.
 
-:: 5. Inicia o servidor Python
-echo [INFO] Servidor iniciando em http://127.0.0.1:8765 ...
+REM 4. Inicia o servidor principal (o proprio main.py abre SOMENTE a janela dedicada --app)
 python main.py
 
-echo.
-echo [INFO] Servidor encerrado.
-pause
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERRO] O servidor encerrou com erro. Verifique as mensagens acima.
+    pause
+)

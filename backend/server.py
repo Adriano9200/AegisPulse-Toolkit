@@ -58,6 +58,12 @@ from backend.services.admin_crm import (
     delete_crm_client,
     save_client_and_generate_report,
 )
+from backend.services.health_score import (
+    compute_health_score,
+    get_latest_health_score,
+    list_health_score_history,
+    compare_health_evaluations,
+)
 from backend.services.storage_health import (
     build_complete_storage_suite_payload,
     list_storage_operations_log,
@@ -199,6 +205,18 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             gaming = audit_gaming_and_dlls(hardware=hw)
             compat = analyze_hardware_compatibility(hardware=hw, os_info=os_data)
             storage_suite = build_complete_storage_suite_payload(base_dir=base_dir)
+            health_eval = compute_health_score(
+                {
+                    "hardware": hw,
+                    "os": os_data,
+                    "drivers_bios": drv_bios,
+                    "software": sw,
+                    "gaming": gaming,
+                    "storage_suite": storage_suite,
+                "health_score": health_eval,
+                },
+                base_dir=base_dir,
+            )
 
             updated_sess = get_session_info(base_dir, self._get_token())
             snapshot = {
@@ -216,15 +234,77 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 "gaming": gaming,
                 "compatibility": compat,
                 "storage_suite": storage_suite,
+                "health_score": health_eval,
                 "pricing_catalog": FAIR_PRICING_CATALOG if updated_sess.get("role") == "admin" else [],
                 "action_logs": SESSION_STATE["action_logs"],
             }
             SESSION_STATE["last_snapshot"] = snapshot
             log_action(
-                f"Diagnóstico Completo v4.0 ({updated_sess.get('role', 'user').upper()})",
+                f"Diagnóstico Completo & Health Score v4.5 ({updated_sess.get('role', 'user').upper()})",
                 f"Varredura executada em {hw.get('hostname')} ({storage_suite.get('total_physical_disks', 1)} disco(s) auditado(s) | {msg})",
             )
             self._send_json(snapshot)
+            return
+
+        if route == "/api/health-score/latest":
+            if not self._require_auth():
+                return
+            latest = get_latest_health_score(base_dir)
+            if not latest:
+                # Se não houver no banco, gera a partir do snapshot atual
+                snap = SESSION_STATE.get("last_snapshot") or {}
+                if not snap:
+                    hw = collect_hardware_info()
+                    os_data = collect_os_info()
+                    st = build_complete_storage_suite_payload(base_dir)
+                    snap = {
+                        "hardware": hw,
+                        "os": os_data,
+                        "drivers_bios": collect_drivers_and_bios(),
+                        "software": collect_installed_software(),
+                        "gaming": audit_gaming_and_dlls(hw),
+                        "storage_suite": st,
+                    }
+                latest = compute_health_score(snap, base_dir=base_dir)
+            self._send_json({"success": True, "health_score": latest})
+            return
+
+        if route == "/api/health-score/history":
+            if not self._require_auth():
+                return
+            limit = int((qs.get("limit") or [20])[0])
+            offset = int((qs.get("offset") or [0])[0])
+            hist = list_health_score_history(base_dir, limit=limit, offset=offset)
+            self._send_json({"success": True, **hist})
+            return
+
+        if route == "/api/health-score/compare":
+            if not self._require_auth():
+                return
+            older_id = (qs.get("older_id") or [None])[0]
+            newer_id = (qs.get("newer_id") or [None])[0]
+            hist = list_health_score_history(base_dir, limit=10)
+            items = hist.get("items") or []
+
+            if not older_id or not newer_id:
+                if len(items) >= 2:
+                    eval_newer = items[0]
+                    eval_older = items[1]
+                elif len(items) == 1:
+                    eval_newer = items[0]
+                    eval_older = items[0]
+                else:
+                    self._send_json({"success": False, "message": "Histórico insuficiente para comparação (mínimo de 1 avaliação)."}, status=400)
+                    return
+            else:
+                eval_older = next((it for it in items if str(it.get("id")) == str(older_id)), None)
+                eval_newer = next((it for it in items if str(it.get("id")) == str(newer_id)), None)
+                if not eval_older or not eval_newer:
+                    self._send_json({"success": False, "message": "Uma das avaliações solicitadas não foi encontrada no histórico."}, status=404)
+                    return
+
+            diff = compare_health_evaluations(eval_older, eval_newer)
+            self._send_json({"success": True, "comparison": diff})
             return
 
         if route == "/api/storage/scan":
@@ -235,7 +315,8 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             if SESSION_STATE.get("last_snapshot"):
                 SESSION_STATE["last_snapshot"]["storage_suite"] = storage_suite
             log_action("Auditoria Forense de Discos & SMART", f"{storage_suite.get('total_physical_disks', 0)} dispositivo(s) analisado(s).")
-            self._send_json({"success": True, "storage_suite": storage_suite, "action_logs": SESSION_STATE["action_logs"]})
+            self._send_json({"success": True, "storage_suite": storage_suite,
+                "health_score": health_eval, "action_logs": SESSION_STATE["action_logs"]})
             return
 
         if route == "/api/admin/crm/list":
@@ -385,6 +466,33 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             return
 
         # ==================== ROTAS DO MÓDULO DE DISCOS, SMART & RECUPERAÇÃO (v4.0) ====================
+        if route == "/api/health-score/evaluate":
+            hw = collect_hardware_info()
+            os_data = collect_os_info()
+            drv_bios = collect_drivers_and_bios()
+            sw = collect_installed_software()
+            net = collect_network_diagnostics()
+            gaming = audit_gaming_and_dlls(hardware=hw)
+            compat = analyze_hardware_compatibility(hardware=hw, os_info=os_data)
+            storage_suite = build_complete_storage_suite_payload(base_dir=base_dir)
+
+            eval_res = compute_health_score(
+                {
+                    "hardware": hw,
+                    "os": os_data,
+                    "drivers_bios": drv_bios,
+                    "software": sw,
+                    "gaming": gaming,
+                    "storage_suite": storage_suite,
+                },
+                base_dir=base_dir,
+            )
+            if SESSION_STATE.get("last_snapshot"):
+                SESSION_STATE["last_snapshot"]["health_score"] = eval_res
+            log_action("Avaliação Health Score", f"Índice calculado: {eval_res['overall_score']}/100 ({eval_res['classification']}) — Cobertura: {eval_res['coverage']['percent']}%")
+            self._send_json({"success": True, "health_score": eval_res, "action_logs": SESSION_STATE["action_logs"]})
+            return
+
         if route == "/api/storage/test":
             disk_num = int(body.get("disk_number", 0))
             dev_uid = str(body.get("device_uid", ""))

@@ -1,10 +1,10 @@
-# 🛡️ AegisPulse IT Toolkit — v4.0.0 (Storage Forensics, SMART, Lifespan, Recovery, CRM & Multi-IA)
+# 🛡️ AegisPulse IT Toolkit — v4.5.0 (Storage Forensics, SMART, Lifespan, Recovery, CRM & Multi-IA)
 
 > **Diagnóstico • Automação • Inteligência**  
 > *Tecnologia sob controle. Suporte com inteligência.*  
 > **Desenvolvido por Adriano Barboza** (`adriano9200@gmail.com` | **WhatsApp Comercial: `+55 61 98515-8434`**)
 
-[![Versão](https://img.shields.io/badge/Vers%C3%A3o-4.0.0_Enterprise-0284c7?style=for-the-badge)](https://github.com/Adriano9200/AegisPulse-Toolkit)
+[![Versão](https://img.shields.io/badge/Vers%C3%A3o-4.5.0_Enterprise-0284c7?style=for-the-badge)](https://github.com/Adriano9200/AegisPulse-Toolkit)
 [![Plataforma](https://img.shields.io/badge/Windows-10_%7C_11_(64--bit)-0078D6?style=for-the-badge&logo=windows)](https://github.com/Adriano9200/AegisPulse-Toolkit)
 [![Storage Forensics](https://img.shields.io/badge/Storage-SMART_%7C_NVMe_%7C_Recovery-f59e0b?style=for-the-badge)](https://github.com/Adriano9200/AegisPulse-Toolkit)
 [![Licença](https://img.shields.io/badge/Licen%C3%A7a-Propriet%C3%A1ria_(Source--Available)-dc2626?style=for-the-badge)](./LICENSE)
@@ -23,9 +23,9 @@ Este repositório no GitHub é disponibilizado na modalidade **Source-Available 
 
 ---
 
-## 💿 Novidade v4.0.0: Estúdio Profissional de Diagnóstico, Saúde SMART, Vida Útil e Recuperação de Armazenamento
+## 💿 Novidade v4.5.0: Estúdio Profissional de Diagnóstico, Saúde SMART, Vida Útil e Recuperação de Armazenamento
 
-O **AegisPulse v4.0.0** incorpora uma suíte forense completa para **HDDs Mecânicos, SSDs SATA, SSDs NVMe, Pendrives USB e Unidades Externas**, estruturada em 10 módulos integrados:
+O **AegisPulse v4.5.0** incorpora uma suíte forense completa para **HDDs Mecânicos, SSDs SATA, SSDs NVMe, Pendrives USB e Unidades Externas**, estruturada em 10 módulos integrados:
 
 1. **Inventário Avançado de Dispositivos (`backend/collectors/storage_advanced.py`):**
    - Identifica fabricante, marca real, modelo, número de série, firmware, interface, protocolo (`NVMe`, `AHCI/SATA`, `USB UASP`, `USB BOT`), tipo de mídia, rotação (`RPM`) e controlador/ponte USB (`JMicron`, `ASMedia`, `Realtek`).
@@ -88,4 +88,4 @@ Nenhum código-fonte GPL dessas ferramentas é embutido ou redistribuído dentro
 
 **Desenvolvido por Adriano Barboza**  
 📱 **WhatsApp:** [+55 61 98515-8434](https://wa.me/5561985158434) | 📧 **E-mail:** `adriano9200@gmail.com`  
-*AegisPulse IT Toolkit v4.0.0 — Diagnóstico • Automação • Inteligência.*
+*AegisPulse IT Toolkit v4.5.0 — Diagnóstico • Automação • Inteligência.*

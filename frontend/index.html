@@ -11,7 +11,7 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AegisPulse IT Toolkit v4.0 — Por Adriano Barboza</title>
+    <title>AegisPulse IT Toolkit v4.5 — Por Adriano Barboza</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -21,7 +21,7 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
             <div style="text-align:center;margin-bottom:14px;">
                 <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
                 <div class="modal-badge" style="margin-top:6px;">DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</div>
-                <h2 style="margin-top:4px;">AegisPulse IT Toolkit v4.0</h2>
+                <h2 style="margin-top:4px;">AegisPulse IT Toolkit v4.5</h2>
                 <p class="modal-sub"><strong>Tecnologia sob controle. Suporte com inteligência.</strong><br>Desenvolvido por Adriano Barboza • WhatsApp: <strong>+55 61 98515-8434</strong></p>
             </div>
 
@@ -75,7 +75,7 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                     </div>
                     <div>
                         <h1 style="line-height:1.1;">AegisPulse</h1>
-                        <span style="color:#38bdf8;font-weight:700;letter-spacing:1px;font-size:10.5px;">IT TOOLKIT v4.0</span>
+                        <span style="color:#38bdf8;font-weight:700;letter-spacing:1px;font-size:10.5px;">IT TOOLKIT v4.5</span>
                     </div>
                 </div>
                 <div style="font-size:11px;color:#e2e8f0;font-weight:600;margin-top:2px;">Diagnóstico • Automação • Inteligência</div>
@@ -85,6 +85,9 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
             <nav class="nav-menu">
                 <button class="nav-item active" data-tab="tab-dashboard">
                     <span>📊</span> Visão Geral & Temps
+                </button>
+                <button class="nav-item" data-tab="tab-healthscore" style="border-left:3px solid #10b981;">
+                    <span>🩺</span> Health Score (Índice de Saúde)
                 </button>
                 <button class="nav-item" data-tab="tab-storage" style="border-left:3px solid #38bdf8;">
                     <span>💿</span> Discos, SMART & Recuperação
@@ -139,7 +142,7 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
             <header class="topbar">
                 <div>
                     <h2 id="machineTitle">Carregando diagnóstico do equipamento...</h2>
-                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse v4.0 inspeciona o sistema e os discos</p>
+                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse v4.5 inspeciona o sistema e os discos</p>
                 </div>
                 <div class="topbar-actions">
                     <span id="licenseBadge" class="status-pill" style="border-color:#38bdf8;color:#38bdf8;">Verificando Licença...</span>
@@ -176,6 +179,11 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                         <strong id="kpiAlerts">—</strong>
                         <small id="kpiBiosStatus" class="muted">BIOS: —</small>
                     </div>
+                    <div class="kpi-card" style="border-color:rgba(16,185,129,0.4);">
+                        <span class="kpi-label">ÍNDICE GERAL HEALTH SCORE</span>
+                        <strong id="kpiHealthScore" style="color:#10b981;">—</strong>
+                        <small id="kpiHealthCoverage" class="muted">Cobertura: —</small>
+                    </div>
                 </div>
 
                 <div class="two-col">
@@ -186,6 +194,169 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                     <div class="panel-card">
                         <h3>Segurança, Defender, Firmware & Sensores Térmicos</h3>
                         <div id="securityDetailsList" class="kv-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA NOVO: HEALTH SCORE (ÍNDICE INTELIGENTE DE SAÚDE) -->
+            <section id="tab-healthscore" class="tab-panel">
+                <!-- CABEÇALHO EXECUTIVO E PONTUAÇÃO GERAL -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:5px solid #10b981;">
+                    <div class="flex-between">
+                        <div>
+                            <div class="flex-row" style="gap:8px;align-items:center;">
+                                <h2 style="font-size:20px;color:var(--text);margin:0;">🩺 AegisPulse Health Score — Índice de Saúde do Computador</h2>
+                                <span class="badge ok" id="hsVersionBadge">v4.5</span>
+                            </div>
+                            <p class="muted" style="margin-top:4px;">Avaliação técnica determinística baseada em 8 categorias ponderadas, trilha de auditoria e análise de tendências.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn primary" id="btnEvaluateHealthScore">⚡ Recalcular Health Score Agora</button>
+                            <button class="btn secondary" id="btnCompareHealthScore">📊 Comparar com Avaliação Anterior</button>
+                            <button class="btn secondary" id="btnToggleAuditTrail">🔍 Ver Trilha de Deduções</button>
+                        </div>
+                    </div>
+
+                    <!-- CARD DE DESTAQUE DA NOTA -->
+                    <div class="kpi-grid" style="margin-top:16px;grid-template-columns: 1.2fr 1fr 1fr 1.5fr;">
+                        <div class="kpi-card" style="background:rgba(15,23,42,0.85);text-align:center;padding:16px;">
+                            <span class="kpi-label">PONTUAÇÃO GERAL DETERMINÍSTICA</span>
+                            <div style="font-size:38px;font-weight:900;line-height:1.1;margin:6px 0;" id="hsOverallScoreBig">—</div>
+                            <span class="badge ok" id="hsClassBadge" style="font-size:13px;padding:3px 12px;">Aguardando Coleta</span>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">COBERTURA DA AVALIAÇÃO</span>
+                            <strong id="hsCoverageCountText">—</strong>
+                            <small class="muted" id="hsCoveragePctText">0% das categorias disponíveis</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">IDENTIFICADOR NÃO-VOLÁTIL</span>
+                            <code id="hsMachineUuidText" style="font-size:12px;">—</code>
+                            <small class="muted" id="hsHostText">Host: —</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">STATUS TÉCNICO & TRAVA CRÍTICA</span>
+                            <div id="hsCriticalCapNotice" style="font-size:12.5px;font-weight:600;color:#34d399;">Sem falhas críticas bloqueantes</div>
+                            <small class="muted" id="hsEvaluatedAtText">Data: —</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAINEL COMPARATIVO / DIFF INTELIGENTE (OCULTO ATÉ SER SOLICITADO) -->
+                <div id="hsComparisonPanel" class="panel-card hidden" style="margin-bottom:16px;border-left:4px solid #f59e0b;">
+                    <div class="flex-between">
+                        <div>
+                            <h3 style="color:#f59e0b;">📊 Comparação Temporal com Avaliação Anterior (Diff de Tendência)</h3>
+                            <p class="muted" id="hsCompareTrendSummary">Analisando evolução métrica entre duas coletas...</p>
+                        </div>
+                        <button class="btn secondary" onclick="document.getElementById('hsComparisonPanel').classList.add('hidden')">✕ Fechar Comparativo</button>
+                    </div>
+                    <div class="kpi-grid" style="margin-top:12px;">
+                        <div class="kpi-card">
+                            <span class="kpi-label">VARIAÇÃO DA NOTA</span>
+                            <strong id="hsDiffScoreDelta">—</strong>
+                            <small class="muted" id="hsDiffDates">—</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">VARIAÇÃO DE COBERTURA</span>
+                            <strong id="hsDiffCoverageDelta">—</strong>
+                            <small class="muted">Diferença de sensores ativos</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">NOVOS PROBLEMAS</span>
+                            <strong id="hsDiffNewCount" style="color:#ef4444;">0</strong>
+                            <small class="muted">Alertas adicionados</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">PROBLEMAS RESOLVIDOS</span>
+                            <strong id="hsDiffResolvedCount" style="color:#10b981;">0</strong>
+                            <small class="muted">Falhas saneadas</small>
+                        </div>
+                    </div>
+                    <div id="hsDiffDetailsList" style="margin-top:12px;" class="kv-list"></div>
+                </div>
+
+                <!-- TRILHA DE AUDITORIA & EXPLICABILIDADE (OCULTO ATÉ SER SOLICITADO) -->
+                <div id="hsAuditPanel" class="panel-card hidden" style="margin-bottom:16px;border-left:4px solid #38bdf8;">
+                    <div class="flex-between">
+                        <div>
+                            <h3 style="color:#38bdf8;">🔍 Trilha de Auditoria & Justificativa da Pontuação</h3>
+                            <p class="muted">Transparência total sobre todos os fatores que reduziram a nota a partir da base 100.</p>
+                        </div>
+                        <button class="btn secondary" onclick="document.getElementById('hsAuditPanel').classList.add('hidden')">✕ Fechar Auditoria</button>
+                    </div>
+                    <div class="table-scroll" style="margin-top:12px;max-height:260px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Categoria</th><th>Pontos Deduzidos</th><th>Motivo / Evidência Técnica Observada</th></tr>
+                            </thead>
+                            <tbody id="hsAuditTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 8 CATEGORIAS PONDERADAS -->
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between" style="margin-bottom:12px;">
+                        <div>
+                            <h3>Desempenho por Categoria Avaliada (8 Pilares)</h3>
+                            <p class="muted">Cada categoria possui pontuação própria, peso normalizado, evidências reais e estado de integridade.</p>
+                        </div>
+                        <span class="badge ok">100% Determinístico</span>
+                    </div>
+                    <div class="catalog-grid" id="hsCategoriesGrid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));"></div>
+                </div>
+
+                <!-- DIAGNÓSTICO ACIONÁVEL PRIORIZADO -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #ef4444;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>⚠️ Diagnóstico Acionável Priorizado (Problemas Detectados & Plano de Ação)</h3>
+                            <p class="muted">Ordenado estritamente por gravidade e risco aos dados: Falhas Críticas > Estabilidade > Desempenho > Preventivo.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn secondary active" onclick="filterFindings('TODOS', this)">Todos (<span id="countFindingsAll">0</span>)</button>
+                            <button class="btn secondary" onclick="filterFindings('CRÍTICO', this)" style="color:#ef4444;">Críticos (<span id="countFindingsCrit">0</span>)</button>
+                            <button class="btn secondary" onclick="filterFindings('ALTO', this)" style="color:#f97316;">Altos (<span id="countFindingsHigh">0</span>)</button>
+                            <button class="btn secondary" onclick="filterFindings('MÉDIO', this)" style="color:#f59e0b;">Médios (<span id="countFindingsMed">0</span>)</button>
+                        </div>
+                    </div>
+                    <div class="table-scroll" style="margin-top:12px;max-height:360px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Problema / Componente</th>
+                                    <th>Severidade</th>
+                                    <th>Impacto Provável</th>
+                                    <th>Evidência Técnica Observada</th>
+                                    <th>Grau de Confiança</th>
+                                    <th>Recomendação Técnica</th>
+                                    <th>Risco da Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hsFindingsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- HISTÓRICO PERSISTENTE SQLITE & GRÁFICO DE TENDÊNCIAS -->
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Evolução Histórica da Pontuação (Persistência SQLite)</h3>
+                        <p class="muted" style="margin-bottom:8px;">Acompanhamento contínuo da pontuação ao longo das semanas de suporte.</p>
+                        <div id="hsHistoryChartBox" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;min-height:140px;"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>Avaliações Registradas na Base de Dados</h3>
+                        <p class="muted" style="margin-bottom:8px;">Histórico armazenado em <code>data/aegispulse_storage.db</code>.</p>
+                        <div class="table-scroll" style="max-height:210px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Data/Hora</th><th>Nota</th><th>Classificação</th><th>Cobertura</th><th>Falha Crítica</th><th>Ação</th></tr>
+                                </thead>
+                                <tbody id="hsHistoryTableBody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </section>

@@ -1,4 +1,4 @@
-# 📘 Manual de Instruções Oficial — AegisPulse IT Toolkit v4.0.0
+# 📘 Manual de Instruções Oficial — AegisPulse IT Toolkit v4.5.0
 
 **Identidade Oficial:**
 > **AegisPulse IT Toolkit**  
@@ -21,7 +21,7 @@
 
 ---
 
-## 2. Como Usar o Novo Módulo: 💿 Discos, SMART & Recuperação (v4.0.0)
+## 2. Como Usar o Novo Módulo: 💿 Discos, SMART & Recuperação (v4.5.0)
 
 Acesse a segunda aba do menu lateral (**💿 Discos, SMART & Recuperação**) para utilizar as 10 seções profissionais:
 
@@ -59,6 +59,17 @@ Acesse a segunda aba do menu lateral (**💿 Discos, SMART & Recuperação**) pa
 
 ---
 
+## 5. Como Operar o AegisPulse Health Score (v4.5.0)
+
+Acesse a nova aba **🩺 Health Score** no menu lateral para visualizar o diagnóstico de saúde geral:
+1. **Pontuação Geral & Cobertura:** Exibe a nota (0–100), faixa de cor, selo de cobertura (ex: `8 de 8 categorias disponíveis`) e o identificador não-volátil do equipamento (`AEGIS-DEV-...`).
+2. **Desempenho por Categoria:** Analise individualmente as 8 categorias ponderadas com seus pesos efetivos, barras de progresso e métricas observadas.
+3. **Diagnóstico Acionável Priorizado:** Problemas técnicos listados por ordem de gravidade (Crítico > Alto > Médio > Baixo) com evidência técnica, grau de confiança, impacto provável, recomendação e nível de risco da ação.
+4. **Comparação Temporal (Diff):** Clique em **📊 Comparar com Avaliação Anterior** para visualizar a variação exata da nota ($\Delta$), se houve melhora real ou degradação e a lista de problemas novos e resolvidos.
+5. **Trilha de Auditoria:** Clique em **🔍 Ver Trilha de Deduções** para auditar exatamente quantos pontos foram deduzidos e por quais motivos técnicos.
+
+---
+
 ## 3. Como Executar os Testes Automatizados
 
 Para validar todos os cenários do módulo de armazenamento (discos saudáveis, RAW, erros SMART, CRC, desconexões USB, travas de segurança e retomada de imagem):
@@ -70,7 +81,7 @@ python -m unittest discover -s tests -p "test_*.py" -v
 
 ---
 
-## 4. Como Atualizar sua Pasta Local e Subir a v4.0.0 para o GitHub
+## 4. Como Atualizar sua Pasta Local e Subir a v4.5.0 para o GitHub
 
 Abra o **PowerShell** e execute:
 
@@ -80,6 +91,6 @@ cd "D:\PROJETOS_PESSOAL\AegisPulse-Toolkit"
 python -m unittest discover -s tests -p "test_*.py" -v
 git add .
 git status
-git commit -m "feat(storage): lancamento AegisPulse v4.0.0 com modulo forense de discos, SMART profundo, vida util SQLite, testes de integridade e recuperacao assistida por Adriano Barboza"
+git commit -m "feat(storage): lancamento AegisPulse v4.5.0 com modulo forense de discos, SMART profundo, vida util SQLite, testes de integridade e recuperacao assistida por Adriano Barboza"
 git push
 ```

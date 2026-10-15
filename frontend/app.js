@@ -366,6 +366,20 @@ function renderDashboard(data) {
     document.getElementById("kpiAlerts").textContent = `Risco Discos: ${stRisk} | ${sw.outdated_count || 0} Apps | ${gaming.missing_dlls_count || 0} DLLs`;
     document.getElementById("kpiBiosStatus").textContent = `BIOS ${bios.smbios_version} (${bios.status_label})`;
 
+    const hs = data.health_score || {};
+    if (hs && hs.overall_score != null) {
+        const hsScoreEl = document.getElementById("kpiHealthScore");
+        const hsCovEl = document.getElementById("kpiHealthCoverage");
+        if (hsScoreEl) {
+            hsScoreEl.textContent = `${hs.overall_score}/100`;
+            hsScoreEl.style.color = hs.classification_color || "#10b981";
+        }
+        if (hsCovEl) {
+            hsCovEl.textContent = `${hs.classification} (${hs.coverage?.label || '8/8'})`;
+        }
+        renderHealthScoreTab(hs);
+    }
+
     const firstCpu = (hw.cpus && hw.cpus[0]) ? hw.cpus[0].name : "Processador N/D";
 
     // Detalhes do SO
@@ -1326,3 +1340,306 @@ document.getElementById("btnExportHtml").addEventListener("click", exportHtmlRep
         console.error(e);
     }
 })();
+
+// ==================== CONTROLADOR AEGISPULSE HEALTH SCORE (v4.5) ====================
+let CURRENT_HEALTH_SCORE = null;
+let CURRENT_FINDINGS_FILTER = "TODOS";
+
+function renderHealthScoreTab(hs) {
+    if (!hs) return;
+    CURRENT_HEALTH_SCORE = hs;
+
+    const scoreBig = document.getElementById("hsOverallScoreBig");
+    if (scoreBig) {
+        scoreBig.textContent = `${hs.overall_score}`;
+        scoreBig.style.color = hs.classification_color || "#10b981";
+    }
+
+    const classBadge = document.getElementById("hsClassBadge");
+    if (classBadge) {
+        classBadge.textContent = hs.classification ? hs.classification.toUpperCase() : "DESCONHECIDO";
+        classBadge.className = `badge ${hs.classification_badge || 'ok'}`;
+    }
+
+    const covCount = document.getElementById("hsCoverageCountText");
+    if (covCount) covCount.textContent = hs.coverage?.label || "—";
+
+    const covPct = document.getElementById("hsCoveragePctText");
+    if (covPct) covPct.textContent = `${hs.coverage?.percent || 0}% de cobertura analítica`;
+
+    const uuidTxt = document.getElementById("hsMachineUuidText");
+    if (uuidTxt) uuidTxt.textContent = hs.machine_uuid || "—";
+
+    const hostTxt = document.getElementById("hsHostText");
+    if (hostTxt) hostTxt.textContent = `Host: ${hs.hostname || 'Local'}`;
+
+    const dateTxt = document.getElementById("hsEvaluatedAtText");
+    if (dateTxt) dateTxt.textContent = `Avaliado em: ${hs.evaluated_at || '—'}`;
+
+    const capNotice = document.getElementById("hsCriticalCapNotice");
+    if (capNotice) {
+        if (hs.critical_cap_applied) {
+            capNotice.innerHTML = "🚨 <strong>TRAVA CRÍTICA ATIVA:</strong> Nota limitada a 59 (Ruim) devido a falha crítica de hardware/dados.";
+            capNotice.style.color = "#ef4444";
+        } else if (hs.has_critical_issue) {
+            capNotice.innerHTML = "⚠️ <strong>ALERTA:</strong> Há falha grave identificada nos achados técnicos.";
+            capNotice.style.color = "#f97316";
+        } else {
+            capNotice.innerHTML = "✅ <strong>NORMAL:</strong> Nenhuma falha crítica de hardware ou perda de dados detectada.";
+            capNotice.style.color = "#34d399";
+        }
+    }
+
+    // 8 Categorias Ponderadas
+    const catsGrid = document.getElementById("hsCategoriesGrid");
+    if (catsGrid) {
+        catsGrid.innerHTML = Object.entries(hs.categories || {}).map(([ck, cv]) => {
+            const bCls = cv.status === "critico" ? "err" : (cv.status === "atencao" ? "warn" : "ok");
+            const scDisplay = cv.available ? `${cv.score}/100` : "Indisponível";
+            const barFill = cv.available ? cv.score : 0;
+            const barColor = cv.status === "critico" ? "#ef4444" : (cv.status === "atencao" ? "#f59e0b" : "#10b981");
+
+            return `
+            <div class="maint-card" style="border-top:3px solid ${barColor};">
+                <div class="flex-between">
+                    <strong>${cv.category_title || ck}</strong>
+                    <span class="badge ${bCls}">${(cv.status || 'normal').toUpperCase()}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0 4px;">
+                    <span style="font-size:18px;font-weight:700;color:${barColor};">${scDisplay}</span>
+                    <small class="muted">Peso: ${cv.effective_weight_pct || 0}%</small>
+                </div>
+                <div class="bar-bg" style="width:100%;height:8px;margin-bottom:8px;">
+                    <div class="bar-fill" style="background-color:${barColor} !important;width:${barFill}%;"></div>
+                </div>
+                <p class="muted" style="font-size:12px;margin:0;">${cv.summary || 'Sem observações.'}</p>
+            </div>
+            `;
+        }).join("");
+    }
+
+    // Achados e Trilha de Auditoria
+    renderFindingsTable(hs.prioritized_findings || []);
+    renderAuditTrailTable(hs.audit_trail?.deductions_detail || []);
+    loadHealthScoreHistory();
+}
+
+function renderFindingsTable(findings) {
+    const tbody = document.getElementById("hsFindingsTableBody");
+    if (!tbody) return;
+
+    // Atualiza contadores dos filtros
+    const allCount = findings.length;
+    const critCount = findings.filter(f => f.severity === "CRÍTICO").length;
+    const highCount = findings.filter(f => f.severity === "ALTO").length;
+    const medCount = findings.filter(f => f.severity === "MÉDIO").length;
+
+    const elAll = document.getElementById("countFindingsAll");
+    if (elAll) elAll.textContent = allCount;
+    const elCrit = document.getElementById("countFindingsCrit");
+    if (elCrit) elCrit.textContent = critCount;
+    const elHigh = document.getElementById("countFindingsHigh");
+    if (elHigh) elHigh.textContent = highCount;
+    const elMed = document.getElementById("countFindingsMed");
+    if (elMed) elMed.textContent = medCount;
+
+    const filtered = CURRENT_FINDINGS_FILTER === "TODOS"
+        ? findings
+        : findings.filter(f => f.severity === CURRENT_FINDINGS_FILTER);
+
+    if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7">Nenhum problema encontrado neste nível de severidade.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(f => {
+        const bCls = f.severity === "CRÍTICO" ? "err" : (f.severity === "ALTO" ? "warn" : "ok");
+        const rCls = (f.action_risk_level || "").includes("ALTO") ? "err" : ((f.action_risk_level || "").includes("MODERADO") ? "warn" : "ok");
+
+        return `
+        <tr>
+            <td><strong>${f.title}</strong><br><small class="muted">${f.affected_component}</small></td>
+            <td><span class="badge ${bCls}">${f.severity}</span></td>
+            <td><small>${f.probable_impact}</small></td>
+            <td><code>${f.technical_evidence}</code></td>
+            <td><small>${f.confidence}</small></td>
+            <td><strong>${f.recommendation}</strong></td>
+            <td><span class="badge ${rCls}">${f.action_risk_level}</span></td>
+        </tr>
+        `;
+    }).join("");
+}
+
+function filterFindings(sev, btn) {
+    CURRENT_FINDINGS_FILTER = sev;
+    if (btn && btn.parentElement) {
+        btn.parentElement.querySelectorAll(".btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+    }
+    if (CURRENT_HEALTH_SCORE) {
+        renderFindingsTable(CURRENT_HEALTH_SCORE.prioritized_findings || []);
+    }
+}
+
+function renderAuditTrailTable(deductions) {
+    const tbody = document.getElementById("hsAuditTableBody");
+    if (!tbody) return;
+    if (!deductions || !deductions.length) {
+        tbody.innerHTML = '<tr><td colspan="3">Nenhuma penalidade aplicada. A máquina obteve nota máxima nas categorias disponíveis!</td></tr>';
+        return;
+    }
+    tbody.innerHTML = deductions.map(d => `
+        <tr>
+            <td><strong>${d.category_title}</strong></td>
+            <td><span class="badge err">-${d.points} pts</span></td>
+            <td>${d.reason}</td>
+        </tr>
+    `).join("");
+}
+
+async function loadHealthScoreHistory() {
+    try {
+        const res = await apiFetch("/api/health-score/history?limit=15");
+        const items = res.items || [];
+        const tbody = document.getElementById("hsHistoryTableBody");
+        if (tbody) {
+            tbody.innerHTML = items.map(it => `
+                <tr>
+                    <td><code>${it.evaluated_at}</code></td>
+                    <td><strong>${it.overall_score}</strong></td>
+                    <td><span class="badge ${it.classification_badge || 'ok'}">${it.classification}</span></td>
+                    <td>${it.coverage?.label || '8/8'}</td>
+                    <td>${it.has_critical_issue ? '<span class="badge err">SIM</span>' : '<span class="badge ok">Não</span>'}</td>
+                    <td><button class="btn secondary" onclick="viewHistoricalHealthScore(${it.id})">🔍 Ver</button></td>
+                </tr>
+            `).join("") || '<tr><td colspan="6">Nenhuma avaliação anterior no banco SQLite.</td></tr>';
+        }
+        renderHealthScoreChart(res.chart_series || []);
+    } catch (e) {
+        console.warn("Falha ao carregar histórico de Health Score:", e);
+    }
+}
+
+function renderHealthScoreChart(series) {
+    const box = document.getElementById("hsHistoryChartBox");
+    if (!box) return;
+    if (!series || series.length < 1) {
+        box.innerHTML = '<p class="muted">Sem coletas suficientes no histórico SQLite.</p>';
+        return;
+    }
+    const w = 460;
+    const h = 110;
+    const pts = series.slice(-12);
+    const stepX = pts.length > 1 ? (w - 40) / (pts.length - 1) : 0;
+
+    const coords = pts.map((p, i) => {
+        const x = 20 + i * stepX;
+        const val = Math.min(100, Math.max(0, Number(p.score || 0)));
+        const y = h - 20 - (val / 100) * (h - 36);
+        return `${x},${y.toFixed(1)}`;
+    }).join(" ");
+
+    box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-bottom:6px;">
+            <span>📈 Série Temporal Health Score (${pts.length} coletas registradas)</span>
+            <span><strong style="color:#10b981;">● Pontuação (0–100)</strong></span>
+        </div>
+        <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:110px;overflow:visible;">
+            <line x1="20" y1="${h - 20}" x2="${w - 20}" y2="${h - 20}" stroke="#334155" stroke-width="1"/>
+            <line x1="20" y1="${h - 20 - 0.6 * (h - 36)}" x2="${w - 20}" y2="${h - 20 - 0.6 * (h - 36)}" stroke="#f59e0b" stroke-width="0.7" stroke-dasharray="3,3"/>
+            <line x1="20" y1="${h - 20 - 0.9 * (h - 36)}" x2="${w - 20}" y2="${h - 20 - 0.9 * (h - 36)}" stroke="#10b981" stroke-width="0.7" stroke-dasharray="3,3"/>
+            ${pts.length > 1 ? `<polyline fill="none" stroke="#10b981" stroke-width="2.5" points="${coords}"/>` : ''}
+            ${pts.map((p, i) => {
+                const x = 20 + i * stepX;
+                const val = Math.min(100, Math.max(0, Number(p.score || 0)));
+                const y = h - 20 - (val / 100) * (h - 36);
+                const color = val >= 75 ? "#10b981" : (val >= 60 ? "#f59e0b" : "#ef4444");
+                return `<circle cx="${x}" cy="${y.toFixed(1)}" r="4" fill="${color}"><title>${p.date}: ${p.score} pts (${p.classification})</title></circle>`;
+            }).join("")}
+        </svg>
+    `;
+}
+
+// Event Listeners do Health Score
+const btnEvalHs = document.getElementById("btnEvaluateHealthScore");
+if (btnEvalHs) {
+    btnEvalHs.addEventListener("click", async () => {
+        showToast("🩺 Recalculando Índice de Saúde Health Score e avaliando 8 categorias...");
+        try {
+            const res = await apiFetch("/api/health-score/evaluate", { method: "POST" });
+            if (res.health_score) {
+                renderHealthScoreTab(res.health_score);
+                showToast(`✅ Health Score calculado: ${res.health_score.overall_score}/100 (${res.health_score.classification})!`);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    });
+}
+
+const btnCompHs = document.getElementById("btnCompareHealthScore");
+if (btnCompHs) {
+    btnCompHs.addEventListener("click", async () => {
+        showToast("📊 Consultando comparação temporal com avaliação anterior...");
+        try {
+            const res = await apiFetch("/api/health-score/compare");
+            if (res.success && res.comparison) {
+                renderHealthScoreComparison(res.comparison);
+            } else {
+                showToast(res.message || "Histórico insuficiente para comparação.");
+            }
+        } catch (e) {
+            showToast("Necessário ao menos 1 avaliação anterior salva no SQLite.");
+        }
+    });
+}
+
+function renderHealthScoreComparison(comp) {
+    const panel = document.getElementById("hsComparisonPanel");
+    if (!panel) return;
+    panel.classList.remove("hidden");
+
+    document.getElementById("hsCompareTrendSummary").innerHTML = `<strong>${comp.trend_label}:</strong> ${comp.trend_summary}`;
+
+    const deltaSign = comp.score_delta > 0 ? `+${comp.score_delta}` : `${comp.score_delta}`;
+    const scoreDeltaEl = document.getElementById("hsDiffScoreDelta");
+    if (scoreDeltaEl) {
+        scoreDeltaEl.textContent = `${deltaSign} pts`;
+        scoreDeltaEl.style.color = comp.score_delta >= 0 ? "#10b981" : "#ef4444";
+    }
+
+    const diffDatesEl = document.getElementById("hsDiffDates");
+    if (diffDatesEl) diffDatesEl.textContent = `${comp.older_date} ➔ ${comp.newer_date}`;
+
+    const covDeltaEl = document.getElementById("hsDiffCoverageDelta");
+    if (covDeltaEl) covDeltaEl.textContent = `${comp.coverage_delta > 0 ? '+' : ''}${comp.coverage_delta}%`;
+
+    const newCntEl = document.getElementById("hsDiffNewCount");
+    if (newCntEl) newCntEl.textContent = (comp.new_findings || []).length;
+
+    const resCntEl = document.getElementById("hsDiffResolvedCount");
+    if (resCntEl) resCntEl.textContent = (comp.resolved_findings || []).length;
+
+    const detailsBox = document.getElementById("hsDiffDetailsList");
+    if (detailsBox) {
+        let rows = "";
+        for (const f of (comp.new_findings || [])) {
+            rows += `<div class="kv-row"><span class="badge err">NOVO ALERTA</span><strong>${f.title}</strong> (${f.affected_component})</div>`;
+        }
+        for (const f of (comp.resolved_findings || [])) {
+            rows += `<div class="kv-row"><span class="badge ok">PROBLEMA RESOLVIDO</span><strong>${f.title}</strong> (${f.affected_component})</div>`;
+        }
+        if (!rows) {
+            rows = '<p class="muted" style="margin:4px 0;">Nenhum problema novo ou resolvido. Conjunto de alertas permaneceu idêntico.</p>';
+        }
+        detailsBox.innerHTML = rows;
+    }
+}
+
+const btnToggleAudit = document.getElementById("btnToggleAuditTrail");
+if (btnToggleAudit) {
+    btnToggleAudit.addEventListener("click", () => {
+        const p = document.getElementById("hsAuditPanel");
+        if (p) p.classList.toggle("hidden");
+    });
+}

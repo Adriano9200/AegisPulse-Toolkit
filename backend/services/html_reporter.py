@@ -8,7 +8,7 @@ AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
 VERSÃO:  4.0.0
 ================================================================================
 Descrição:
-Etapa 10 — Gerador de Laudos Técnicos Executivos em HTML5/PDF (v4.0.0):
+Etapa 10 — Gerador de Laudos Técnicos Executivos em HTML5/PDF (v4.5.0):
 - Inclui Dossiê Forense de Armazenamento (Identificação completa, capacidades em
   Bytes, GB/TB e GiB/TiB, atributos SMART detalhados, Temperatura, Horas Ligadas
   e Dias, Desgaste, TBW, Erros Realocados/Pendentes/CRC, Classificação de Risco,
@@ -107,7 +107,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
     os_ver = html.escape(str(os_info.get("display_version") or "N/D"))
     os_build = html.escape(str(os_info.get("full_build") or "N/D"))
 
-    # Seção Forense de Discos, SMART, Vida Útil e Riscos (v4.0.0)
+    # Seção Forense de Discos, SMART, Vida Útil e Riscos (v4.5.0)
     storage_cards_html = ""
     for dev in (st_suite.get("devices") or []):
         sm = dev.get("smart_summary") or {}
@@ -264,7 +264,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
         formatted_ai = _markdown_to_html(ai_analysis)
         ai_block = f"""
         <div class="card ai-card" style="margin-top: 18px; border-left: 4px solid #0284c7;">
-            <h2>✨ Parecer Inteligente — AegisPulse AI v4.0</h2>
+            <h2>✨ Parecer Inteligente — AegisPulse AI v4.5</h2>
             <div class="ai-content">{formatted_ai}</div>
         </div>
         """
@@ -278,7 +278,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laudo Técnico AegisPulse v4.0 — {hostname}</title>
+    <title>Laudo Técnico AegisPulse v4.5 — {hostname}</title>
     <style>
         :root {{
             --bg: #0f172a;
@@ -410,13 +410,15 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
 <div class="container">
     <div class="header">
         <div>
-            <h1>AEGISPULSE IT TOOLKIT v4.0 — DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</h1>
+            <h1>AEGISPULSE IT TOOLKIT v4.5 — DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</h1>
             <p style="color:#0284c7;font-weight:600;margin-bottom:4px;">Tecnologia sob controle. Suporte com inteligência.</p>
             <p>Responsável Técnico / Autor: <strong>Adriano Barboza</strong> | WhatsApp: <strong>+55 61 98515-8434</strong> | adriano9200@gmail.com</p>
             <p>Data/Hora da Coleta: {now_str} | Hostname: <strong>{hostname}</strong></p>
         </div>
         <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
     </div>
+
+    {health_score_panel_html}
 
     <div class="grid">
         <div class="card">
@@ -452,7 +454,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
         </div>
     </div>
 
-    <!-- NOVA SEÇÃO v4.0: DOSSIÊ FORENSE DE ARMAZENAMENTO, SAÚDE SMART, VIDA ÚTIL & RISCOS -->
+    <!-- NOVA SEÇÃO v4.5: DOSSIÊ FORENSE DE ARMAZENAMENTO, SAÚDE SMART, VIDA ÚTIL & RISCOS -->
     <div class="card" style="margin-bottom: 18px; border-left: 4px solid #f59e0b;">
         <h2>💿 Dossiê Forense de Armazenamento, Saúde SMART, Vida Útil (TBW/POH) & Risco Operacional</h2>
         {storage_cards_html}
@@ -536,7 +538,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
     {ai_block}
 
     <div class="footer">
-        <strong>AegisPulse IT Toolkit v4.0.0</strong> — Diagnóstico • Automação • Inteligência | <em>Tecnologia sob controle. Suporte com inteligência.</em><br>
+        <strong>AegisPulse IT Toolkit v4.5.0</strong> — Diagnóstico • Automação • Inteligência | <em>Tecnologia sob controle. Suporte com inteligência.</em><br>
         Desenvolvido por <strong>Adriano Barboza</strong> • WhatsApp Comercial: <strong>+55 61 98515-8434</strong> • adriano9200@gmail.com
     </div>
 </div>
