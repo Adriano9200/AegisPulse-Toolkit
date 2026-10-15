@@ -5,13 +5,16 @@
 PROJETO: AegisPulse IT Toolkit
 ARQUIVO: backend/services/html_reporter.py
 AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-VERSÃO:  3.0.0
+VERSÃO:  4.0.0
 ================================================================================
 Descrição:
-Gerador de Laudos Técnicos Executivos em HTML5/PDF (v3.0.0):
-- Inclui Temperaturas de CPU e GPU (°C), Seção PC Gamer, Matriz de
-  Compatibilidade de Hardware & Upgrades, barras visuais de disco para PDF,
-  conversor Markdown -> HTML e contatos oficiais (WhatsApp +55 61 98515-8434).
+Etapa 10 — Gerador de Laudos Técnicos Executivos em HTML5/PDF (v4.0.0):
+- Inclui Dossiê Forense de Armazenamento (Identificação completa, capacidades em
+  Bytes, GB/TB e GiB/TiB, atributos SMART detalhados, Temperatura, Horas Ligadas
+  e Dias, Desgaste, TBW, Erros Realocados/Pendentes/CRC, Classificação de Risco,
+  Diagnóstico de Falhas e Procedimentos/Recomendações).
+- Preserva Temperaturas de CPU/GPU, Seção PC Gamer, Matriz de Compatibilidade
+  e Parecer Inteligente da IA.
 """
 
 import re
@@ -92,6 +95,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
     gaming = snapshot.get("gaming", {})
     gp = gaming.get("gamer_profile", {})
     compat = snapshot.get("compatibility", {})
+    st_suite = snapshot.get("storage_suite", {})
     logs = action_logs or []
 
     hostname = html.escape(str(hw.get("hostname") or "Computador"))
@@ -103,6 +107,80 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
     os_ver = html.escape(str(os_info.get("display_version") or "N/D"))
     os_build = html.escape(str(os_info.get("full_build") or "N/D"))
 
+    # Seção Forense de Discos, SMART, Vida Útil e Riscos (v4.0.0)
+    storage_cards_html = ""
+    for dev in (st_suite.get("devices") or []):
+        sm = dev.get("smart_summary") or {}
+        lf = dev.get("lifespan") or {}
+        rk = dev.get("risk_assessment") or {}
+        cap = dev.get("capacity") or {}
+        r_lvl = str(rk.get("risk_level") or "BAIXO")
+        r_badge = "err" if r_lvl in ("ALTO", "CRÍTICO") else ("warn" if r_lvl == "MODERADO" else "ok")
+
+        smart_rows = ""
+        for a in (dev.get("smart_attributes") or [])[:14]:
+            s_cls = "err" if a.get("severity") == "critical" else ("warn" if a.get("severity") == "warning" else "ok")
+            smart_rows += f"""
+            <tr>
+                <td><code>{html.escape(str(a.get('id')))}</code></td>
+                <td><strong>{html.escape(str(a.get('name')))}</strong></td>
+                <td>{a.get('current')} / {a.get('worst')} (Lim: {a.get('threshold')})</td>
+                <td><code>{html.escape(str(a.get('raw_hex')))}</code> ({a.get('raw_int')})</td>
+                <td><strong>{html.escape(str(a.get('interpreted')))}</strong></td>
+                <td><span class="badge {s_cls}">{html.escape(str(a.get('severity', 'ok')).upper())}</span></td>
+            </tr>
+            """
+        if not smart_rows:
+            smart_rows = '<tr><td colspan="6">Atributos SMART detalhados não expostos pela controladora/ponte USB deste dispositivo.</td></tr>'
+
+        faults_html = ""
+        for fd in (dev.get("fault_diagnostics") or []):
+            faults_html += f"""
+            <li>
+                <strong>[{html.escape(str(fd.get('category')))}] {html.escape(str(fd.get('title')))}:</strong>
+                {html.escape(str(fd.get('explanation')))}
+                <br><em>Recomendação: {html.escape(str(fd.get('recommendation')))}</em>
+            </li>
+            """
+
+        plan_html = "".join(f"<li>{html.escape(str(p))}</li>" for p in (rk.get("ordered_action_plan") or []))
+
+        storage_cards_html += f"""
+        <div style="border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <h3 style="font-size:15px;color:var(--accent);">
+                    💿 Disco Físico #{dev.get('disk_number')} — {html.escape(str(dev.get('brand')))} {html.escape(str(dev.get('model')))}
+                    (<code>{html.escape(str(dev.get('serial_number')))}</code>)
+                </h3>
+                <span class="badge {r_badge}">RISCO: {html.escape(r_lvl)} (Saúde: {rk.get('health_score', 100)}/100)</span>
+            </div>
+            <div class="grid" style="margin-bottom:8px;">
+                <div>
+                    <div class="kv"><span>Tipo / Interface / Protocolo:</span> <strong>{html.escape(str(dev.get('media_category')))} ({html.escape(str(dev.get('protocol')))})</strong></div>
+                    <div class="kv"><span>Controlador / Firmware:</span> {html.escape(str(dev.get('controller')))} | FW: <code>{html.escape(str(dev.get('firmware')))}</code></div>
+                    <div class="kv"><span>Capacidade Física (Decimal vs Binária):</span> <strong>{html.escape(str(cap.get('formatted')))}</strong> (<code>{cap.get('bytes', 0):,} bytes</code>)</div>
+                    <div class="kv"><span>Tabela de Partições & Unidades:</span> <strong>{html.escape(str(dev.get('partition_style')))}</strong> ({', '.join(dev.get('drive_letters') or ['Sem Letra'])}) | Não Alocado: {dev.get('unallocated_capacity', {}).get('formatted')}</div>
+                </div>
+                <div>
+                    <div class="kv"><span>Temperatura Atual do Disco:</span> <strong>{sm.get('temperature_c') if sm.get('temperature_c') is not None else 'N/D'} °C</strong></div>
+                    <div class="kv"><span>Tempo Acumulado Ligado (POH):</span> <strong>{html.escape(str(lf.get('power_on_formatted')))}</strong> | Ciclos: {sm.get('power_cycles') or 'N/D'}</div>
+                    <div class="kv"><span>Vida Útil (Fabricante vs Estimada TBW):</span> <strong>{html.escape(str(lf.get('manufacturer_reported_str')))}</strong></div>
+                    <div class="kv"><span>Total Lido / Gravado (TBW):</span> Lido: {html.escape(str(lf.get('total_reads_formatted')))} | Gravado: <strong>{html.escape(str(lf.get('total_writes_formatted')))}</strong></div>
+                </div>
+            </div>
+            <div class="kv"><span>Diagnóstico Especializado de Falhas & Causa-Raiz:</span></div>
+            <ul class="ai-ul">{faults_html}</ul>
+            <div class="kv" style="margin-top:6px;"><span>Plano de Ação Recomendado (Ordenado por Menor Risco aos Dados):</span></div>
+            <ul class="ai-ul">{plan_html}</ul>
+            <table style="margin-top:8px;">
+                <thead>
+                    <tr><th>ID</th><th>Atributo SMART / NVMe</th><th>Atual / Pior / Limiar</th><th>Valor Bruto</th><th>Interpretação Técnica</th><th>Severidade</th></tr>
+                </thead>
+                <tbody>{smart_rows}</tbody>
+            </table>
+        </div>
+        """
+
     vol_rows = ""
     for v in hw.get("volumes", []):
         pct = float(v.get("used_percent") or 0)
@@ -111,8 +189,8 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
         <tr>
             <td><strong>{html.escape(str(v.get('drive')))}</strong> ({html.escape(str(v.get('label')))})</td>
             <td>{html.escape(str(v.get('filesystem')))}</td>
-            <td>{v.get('size_gb')} GB</td>
-            <td>{v.get('free_gb')} GB</td>
+            <td>{v.get('size_gb')} GiB</td>
+            <td>{v.get('free_gb')} GiB</td>
             <td>
                 <div class="bar-bg">
                     <div class="bar-fill" style="background-color:{bar_color} !important;width:{min(100, pct)}%;"></div>
@@ -186,7 +264,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
         formatted_ai = _markdown_to_html(ai_analysis)
         ai_block = f"""
         <div class="card ai-card" style="margin-top: 18px; border-left: 4px solid #0284c7;">
-            <h2>✨ Parecer Inteligente — AegisPulse AI</h2>
+            <h2>✨ Parecer Inteligente — AegisPulse AI v4.0</h2>
             <div class="ai-content">{formatted_ai}</div>
         </div>
         """
@@ -200,7 +278,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laudo Técnico AegisPulse — {hostname}</title>
+    <title>Laudo Técnico AegisPulse v4.0 — {hostname}</title>
     <style>
         :root {{
             --bg: #0f172a;
@@ -224,7 +302,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
             padding: 28px;
             line-height: 1.5;
         }}
-        .container {{ max-width: 1120px; margin: 0 auto; }}
+        .container {{ max-width: 1140px; margin: 0 auto; }}
         .header {{
             display: flex;
             justify-content: space-between;
@@ -263,11 +341,11 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
             width: 100%;
             border-collapse: collapse;
             margin-top: 8px;
-            font-size: 13px;
+            font-size: 12.5px;
         }}
         th, td {{
             text-align: left;
-            padding: 8px 10px;
+            padding: 7px 9px;
             border-bottom: 1px solid var(--border);
         }}
         th {{ color: var(--muted); font-weight: 600; background: rgba(15, 23, 42, 0.5); }}
@@ -332,7 +410,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
 <div class="container">
     <div class="header">
         <div>
-            <h1>AEGISPULSE IT TOOLKIT — DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</h1>
+            <h1>AEGISPULSE IT TOOLKIT v4.0 — DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</h1>
             <p style="color:#0284c7;font-weight:600;margin-bottom:4px;">Tecnologia sob controle. Suporte com inteligência.</p>
             <p>Responsável Técnico / Autor: <strong>Adriano Barboza</strong> | WhatsApp: <strong>+55 61 98515-8434</strong> | adriano9200@gmail.com</p>
             <p>Data/Hora da Coleta: {now_str} | Hostname: <strong>{hostname}</strong></p>
@@ -374,6 +452,19 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
         </div>
     </div>
 
+    <!-- NOVA SEÇÃO v4.0: DOSSIÊ FORENSE DE ARMAZENAMENTO, SAÚDE SMART, VIDA ÚTIL & RISCOS -->
+    <div class="card" style="margin-bottom: 18px; border-left: 4px solid #f59e0b;">
+        <h2>💿 Dossiê Forense de Armazenamento, Saúde SMART, Vida Útil (TBW/POH) & Risco Operacional</h2>
+        {storage_cards_html}
+        <h3 style="font-size:13.5px;color:var(--accent);margin:10px 0 6px;">Ocupação de Volumes Lógicos Montados</h3>
+        <table>
+            <thead>
+                <tr><th>Unidade</th><th>Sistema de Arquivos</th><th>Capacidade (GiB)</th><th>Espaço Livre</th><th>Ocupação Visual</th></tr>
+            </thead>
+            <tbody>{vol_rows}</tbody>
+        </table>
+    </div>
+
     <!-- SEÇÃO EXCLUSIVA PC GAMER -->
     <div class="card" style="margin-bottom: 18px; border-left: 4px solid #10b981;">
         <h2>🎮 Análise Completa PC Gamer & Performance Gráfica</h2>
@@ -413,16 +504,6 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
     </div>
 
     <div class="card" style="margin-bottom: 18px;">
-        <h2>Armazenamento e Partições</h2>
-        <table>
-            <thead>
-                <tr><th>Unidade</th><th>Sistema de Arquivos</th><th>Capacidade</th><th>Espaço Livre</th><th>Ocupação Visual</th></tr>
-            </thead>
-            <tbody>{vol_rows}</tbody>
-        </table>
-    </div>
-
-    <div class="card" style="margin-bottom: 18px;">
         <h2>Softwares com Atualização Pendente (Winget)</h2>
         <table>
             <thead>
@@ -455,7 +536,7 @@ def generate_html_report(snapshot: dict, base_dir: Path, ai_analysis: str = "", 
     {ai_block}
 
     <div class="footer">
-        <strong>AegisPulse IT Toolkit v3.0.0</strong> — Diagnóstico • Automação • Inteligência | <em>Tecnologia sob controle. Suporte com inteligência.</em><br>
+        <strong>AegisPulse IT Toolkit v4.0.0</strong> — Diagnóstico • Automação • Inteligência | <em>Tecnologia sob controle. Suporte com inteligência.</em><br>
         Desenvolvido por <strong>Adriano Barboza</strong> • WhatsApp Comercial: <strong>+55 61 98515-8434</strong> • adriano9200@gmail.com
     </div>
 </div>

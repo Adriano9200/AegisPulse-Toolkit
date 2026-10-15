@@ -1,45 +1,38 @@
-# ==============================================================================
-# AegisPulse IT Toolkit - .gitignore (v3.0.0)
-# Autor: Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-# ==============================================================================
-
-# Atalhos virtuais do Google Drive
-*.gdoc
-*.gsheet
-*.gslides
-*.gdrive
-*.old
-*.v1_1_old
-
-# Pacotes ZIP de backup
-*.zip
-
-# Configuracoes sensiveis locais e Banco de Dados SQLite de Clientes (LGPD)
+# Ignorar configurações locais sensíveis, banco de dados SQLite, imagens de disco e chaves de API
 config.json
-.env
-data/*.db
-data/*.sqlite
-data/*.sqlite3
+license.json
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.img
+*.bin
+*.mapfile.json
+*.ddrescue.map
 
-# Relatorios, Orcamentos e Logs de Clientes (NUNCA subir para o GitHub)
+# Ignorar laudos e logs gerados em máquinas de clientes
 reports/*.html
-reports/*.json
-logs/*.log
+reports/*.pdf
 logs/*.html
-!reports/.gitkeep
-!logs/.gitkeep
+logs/*.log
 
-# Cache do Python e Compilacao PyInstaller
+# Ignorar caches Python e builds de executável
 __pycache__/
 *.py[cod]
 *$py.class
 build/
 dist/
 *.spec
+.env
 .venv/
 venv/
 
-# Arquivos temporarios do Sistema Operacional
-Thumbs.db
-.DS_Store
-desktop.ini
+# Ignorar arquivos virtuais do Google Drive e backups antigos
+*.gdoc
+*.gsheet
+*.gslides
+*.old
+*.v1_1_old
+*.v2.old
+*.v3_0_0.old
+AegisPulse-Toolkit-v1.0.0.zip

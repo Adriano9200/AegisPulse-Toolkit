@@ -1,80 +1,91 @@
-# 🛡️ AegisPulse IT Toolkit — Edição Comercial v3.0.0
-### Diagnóstico • Automação • Inteligência
-> **Tecnologia sob controle. Suporte com inteligência.**  
-> *Desenvolvido por **Adriano Barboza** • WhatsApp Comercial: **[+55 61 98515-8434](https://wa.me/5561985158434?text=Ol%C3%A1%20Adriano%20Barboza!%20Vi%20o%20AegisPulse%20IT%20Toolkit%20no%20GitHub%20e%20quero%20adquirir%20uma%20Assinatura%20PRO!)** • E-mail: `adriano9200@gmail.com`*
+# 🛡️ AegisPulse IT Toolkit — v4.0.0 (Storage Forensics, SMART, Lifespan, Recovery, CRM & Multi-IA)
 
-## 📲 Experimente Grátis (Modo Trial) ou Adquira sua Assinatura PRO
+> **Diagnóstico • Automação • Inteligência**  
+> *Tecnologia sob controle. Suporte com inteligência.*  
+> **Desenvolvido por Adriano Barboza** (`adriano9200@gmail.com` | **WhatsApp Comercial: `+55 61 98515-8434`**)
 
-O **AegisPulse IT Toolkit v3.0.0** é uma plataforma proprietária de diagnóstico avançado de hardware, telemetria térmica (CPU/GPU), engenharia de PC Gamer, matriz de compatibilidade de setup, automação de manutenção (Winget/Debloat/Rede/DLLs), CRM técnico em SQLite e consultoria assistida por **Inteligência Artificial Multi-Motor (IA Local N3, Google Gemini 3.x e xAI Grok)**.
+[![Versão](https://img.shields.io/badge/Vers%C3%A3o-4.0.0_Enterprise-0284c7?style=for-the-badge)](https://github.com/Adriano9200/AegisPulse-Toolkit)
+[![Plataforma](https://img.shields.io/badge/Windows-10_%7C_11_(64--bit)-0078D6?style=for-the-badge&logo=windows)](https://github.com/Adriano9200/AegisPulse-Toolkit)
+[![Storage Forensics](https://img.shields.io/badge/Storage-SMART_%7C_NVMe_%7C_Recovery-f59e0b?style=for-the-badge)](https://github.com/Adriano9200/AegisPulse-Toolkit)
+[![Licença](https://img.shields.io/badge/Licen%C3%A7a-Propriet%C3%A1ria_(Source--Available)-dc2626?style=for-the-badge)](./LICENSE)
+[![WhatsApp](https://img.shields.io/badge/WhatsApp-+55_61_98515--8434-10b981?style=for-the-badge&logo=whatsapp)](https://wa.me/5561985158434)
 
-* **⏳ Modo Trial Gratuito (Demonstração):** Permite realizar até **4 análises completas gratuitas** por equipamento utilizando o motor **🧠 IA Local AegisPulse N3** embarcado.
-* **⭐ Assinatura PRO (Para Técnicos, Assistências e Usuários Avançados):** Libera diagnósticos e laudos PDF **ilimitados**, além de desbloquear os motores de IA em nuvem (**✨ Google Gemini 3.x** e **🚀 xAI Grok / Groq Cloud**).
-* **👉 Como Adquirir sua Chave de Ativação (`AEGIS-PRO-...`):**
-  * **WhatsApp Direto:** **[+55 61 98515-8434](https://wa.me/5561985158434?text=Ol%C3%A1%20Adriano%20Barboza!%20Quero%20adquirir%20uma%20Chave%20de%20Assinatura%20PRO%20do%20AegisPulse%20IT%20Toolkit!)** (Adriano Barboza)
-  * **E-mail:** `adriano9200@gmail.com`
+---
 
-## 🚀 Funcionalidades da Versão 3.0.0 (12 Módulos Integrados)
+## 🔒 Aviso de Propriedade Intelectual e Licenciamento Comercial
 
-| Módulo / Aba | Recursos Técnicos Implementados |
+Este repositório no GitHub é disponibilizado na modalidade **Source-Available (Código Visível apenas para Portfólio e Auditoria Técnica)**.  
+**Todos os direitos autorais e comerciais pertencem exclusivamente a Adriano Barboza.** Não é permitido utilizar comercialmente, redistribuir ou remover as travas de licenciamento sem adquirir uma **Chave de Assinatura Oficial (`AEGIS-PRO-...`)**.
+
+👉 **Para adquirir sua Licença de Assinatura PRO ou contratar suporte especializado:**
+- 📱 **WhatsApp Oficial:** [**+55 61 98515-8434** (Clique para conversar com Adriano Barboza)](https://wa.me/5561985158434?text=Ol%C3%A1%20Adriano%20Barboza!%20Vi%20o%20AegisPulse%20IT%20Toolkit%20no%20GitHub%20e%20quero%20adquirir%20uma%20Assinatura%20PRO!)
+- 📧 **E-mail:** `adriano9200@gmail.com`
+
+---
+
+## 💿 Novidade v4.0.0: Estúdio Profissional de Diagnóstico, Saúde SMART, Vida Útil e Recuperação de Armazenamento
+
+O **AegisPulse v4.0.0** incorpora uma suíte forense completa para **HDDs Mecânicos, SSDs SATA, SSDs NVMe, Pendrives USB e Unidades Externas**, estruturada em 10 módulos integrados:
+
+1. **Inventário Avançado de Dispositivos (`backend/collectors/storage_advanced.py`):**
+   - Identifica fabricante, marca real, modelo, número de série, firmware, interface, protocolo (`NVMe`, `AHCI/SATA`, `USB UASP`, `USB BOT`), tipo de mídia, rotação (`RPM`) e controlador/ponte USB (`JMicron`, `ASMedia`, `Realtek`).
+   - Calcula capacidades em **Bytes exatos**, **Decimal (`GB`/`TB` — $10^9/10^{12}$)** e **Binário (`GiB`/`TiB` — $2^{30}/2^{40}$)**, distinguindo capacidade física total, espaço alocado em partições, espaço não alocado, espaço utilizado e livre.
+   - Detecta limitações de adaptadores USB e controladoras RAID/VMD sem inventar métricas indisponíveis.
+2. **Diagnóstico SMART Profundo (HDD, SATA SSD e NVMe):**
+   - Decodifica a tabela binária ATA SMART (`362 bytes VendorSpecific` + `Thresholds`), contadores Windows `StorageReliabilityCounter`, logs de saúde NVMe (`Critical Warning`, `Available Spare`, `Percentage Used`, `Data Units Read/Written`, `Unsafe Shutdowns`, `Media Errors`) e integra com `smartctl` (`smartmontools`) quando disponível.
+   - Trata corretamente atributos específicos de fabricantes (como o contador composto de 48 bits da Seagate nos atributos `01` e `07`).
+3. **Estimativa de Vida Útil e Monitoramento Histórico Persistente (`data/aegispulse_storage.db`):**
+   - Calcula o tempo acumulado ligado em **horas, dias e anos**.
+   - Diferencia estritamente: **(a)** Vida útil reportada pelo fabricante, **(b)** Desgaste estimado por TBW de referência e **(c)** Tendência histórica entre coletas no SQLite (com gráficos SVG e alertas de degradação), sem jamais prometer datas exatas de falha.
+4. **Testes Reais e Controlados de Integridade e Desempenho (`backend/services/storage_diagnostics.py`):**
+   - Verificação Rápida de Saúde, Benchmark de Leitura Sequencial/Blocos (`MB/s`, latência `ms`, `IOPS`), Varredura Controlada de Superfície e disparo/consulta de Autotestes SMART (curto e estendido).
+   - **Proteção Não-Destrutiva:** Nenhum teste destrutivo de escrita é executado por padrão.
+5. **Diagnóstico Especializado de 12 Categorias de Falhas:**
+   - Diferencia **Falhas Físicas**, **Problemas de Cabo/Conexão**, **Corrupção Lógica** e **Limitações do SO**.
+   - Explica tecnicamente **Erros de Redundância Cíclica (CRC)** (deixando claro que erro CRC indica falha no cabo SATA/porta USB e não necessariamente setor defeituoso!), **Setores Realocados/Pendentes/Incorrigíveis**, **Volume RAW**, **Partições Perdidas**, **Disco Não Inicializado**, **Unidade Protegida Contra Gravação (`Read-Only`)**, **Desconexões Inesperadas (Eventos 51, 129, 153, 157)** e **Pendrives USB com Capacidade Adulterada/Falsa**.
+6. **Recuperação Assistida e Preservação de Dados (`backend/services/storage_recovery.py`):**
+   - **Clonagem / Criação de Imagem Setor-a-Setor (`.img`) com Mapfile e Retomada:** Isola blocos com erro de leitura preenchendo com zeros no destino e gravando os endereços defeituosos em `*.mapfile.json` e `.ddrescue.map` (compatível com **GNU `ddrescue`**), permitindo cancelar com segurança e retomar do ponto exato.
+   - **Travas de Segurança:** Bloqueia `Origem == Destino`, impede sobrescrita acidental de discos do sistema e exige confirmação explícita (`CONFIRMAR_IMAGEM`).
+   - **Recuperação de Partições e Arquivos:** Integração com **TestDisk** (mais inspetor nativo de assinaturas `MBR 0x55AA` / `GPT EFI PART`) e **PhotoRec** (mais extrator nativo de assinaturas para outra unidade física).
+   - **Reparação Lógica Controlada (`CHKDSK` / `Repair-Volume`):** Separa Diagnóstico Passivo (`fsutil dirty query`), Verificação Somente-Leitura (`chkdsk /scan`) e Reparação Ativa — **bloqueando automaticamente o `CHKDSK /F` ou `/R` em discos com suspeita de falha física**.
+
+---
+
+## 🎯 Demais Funcionalidades Integradas do AegisPulse
+
+| Módulo | Recursos Principais |
 | :--- | :--- |
-| **1. 📊 Visão Geral & Temperaturas** | Identifica qualquer marca e modelo de computador (Service Tag/Serial), edição e Build/UBR do Windows, Uptime real, status do Defender/TPM 2.0 e **Temperatura Atual de CPU e GPU em `°C`**. |
-| **2. 🖥️ Hardware & Discos (SMART)** | Inspeciona Placa-Mãe, CPU, GPUs (Dedicada Offboard vs Integrada iGPU com leitura de VRAM 64-bit real via Registro), pentes de RAM por slot (com decodificador hexadecimal JEDEC para Samsung, ADATA, Kingston, SK Hynix, Corsair) e saúde SMART de SSDs/HDDs. |
-| **3. 🧩 Compatibilidade & Setup** | Analisa todo o setup atual e informa: Socket da CPU e processadores compatíveis para upgrade, geração/frequência da RAM para expansão, suporte M.2 NVMe/SATA, upgrades de GPU sem gargalo, **Fonte Recomendada (PSU em Watts)** e conformidade Windows 11. |
-| **4. ⚙️ Drivers & BIOS** | Audita versão e idade da BIOS/UEFI, filtra drivers nativos da Microsoft (`2006`) de drivers antigos reais e busca/instala atualizações de drivers oficiais via API COM do Windows Update. |
-| **5. 📦 Softwares, Uninstaller & Debloat** | Detecta programas obsoletos (`winget upgrade`), traz catálogo pós-formatação 1-clique, **Desinstalador Universal** para qualquer programa e **Removedor Seguro de Bloatware UWP**. |
-| **6. 🌐 Rede & Internet** | Inventaria placas de rede ativas, mede latência (Ping), executa Speedtest HTTP via Cloudflare CDN, troca DNS em 1 clique (*Cloudflare 1.1.1.1, Google 8.8.8.8, Cloudflare Security*) e recupera senhas de Wi-Fi salvas no Windows. |
-| **7. 🎮 PC Gamer & DLLs** | Classifica o **Tier Gamer** da máquina (*Tier S 1440p/4K*, *Tier A 1080p Ultra*, *Tier B Competitivo*, *Tier C Casual*), monitora temperaturas de CPU/GPU para jogos, verifica **Dual-Channel**, aponta gargalos, audita DLLs 32/64-bit (`System32`/`SysWOW64`), limpa Cache de Shaders e ativa energia *Ultimate Performance*. |
-| **8. 🧰 Manutenção & Reparo** | Cria Ponto de Restauração do Sistema, limpa arquivos temporários órfãos com cálculo de MB liberados, verifica integridade da imagem do Windows (`DISM`) e repara a pilha de rede (`Winsock`/`TCP-IP`). |
-| **9. ✨ IA Local, Gemini & Grok** | Oferece **🧠 IA Local N3** (gratuita para Trial e PRO) e motores em nuvem **✨ Google Gemini 3.x** e **🚀 xAI Grok / Groq** (exclusivos para Assinantes PRO e ADM), gerando Diagnóstico N3 e Parecer para o Cliente. |
-| **10. 📄 Relatórios & Logs HTML/PDF** | Exporta Laudos Técnicos Executivos prontos para impressão em PDF com nitidez total, barras de disco coloridas, seção PC Gamer e Matriz de Compatibilidade. |
-| **11. 💰 ADM: CRM SQLite & Preços Justos** | *(Exclusivo ADM)* Banco de dados **SQLite** local (`data/aegispulse_admin.db`) para cadastrar clientes com Nome, Telefone e WhatsApp, **Tabela de Preços Médios Justos de Mercado (Sem Abuso)** e **Gerador de Orçamento/Relatório Exclusivo para Enviar ao Cliente**. |
-| **12. 👑 ADM: Licenças & Keygen** | *(Exclusivo ADM)* Gerador criptográfico (**Keygen HMAC-SHA256**) para emitir chaves `AEGIS-PRO-...` (Mensal, Trimestral, Semestral, Anual e Vitalícia) e controle do contador Trial. |
+| **🌡️ Monitoramento Térmico CPU, GPU & Discos** | Medição em tempo real (`°C`) de Processador, Placa de Vídeo e Discos para PCs Gamer e Casuais. |
+| **🧩 Matriz de Compatibilidade & Setup** | Analisa todo o setup (Placa-mãe, Socket CPU, geração/velocidade de RAM, NVMe/SATA, upgrades de GPU sem gargalo, fonte recomendada em Watts e checklist Windows 11). |
+| **🎮 Análise Completa PC Gamer & DLLs** | Classifica o Tier Gamer, audita Dual-Channel, verifica 11 DLLs críticas em `System32` e `SysWOW64` e repara Visual C++ / DirectX em 1 clique. |
+| **📦 Softwares, Winget & Debloat** | Atualiza programas obsoletos, remove Bloatwares nativos e instala o Kit Essencial Pós-Formatação. |
+| **🌐 Rede, DNS, Speedtest & Wi-Fi** | Aplica DNS Cloudflare/Google em 1 clique, mede velocidade de download e recupera senhas de Wi-Fi salvas. |
+| **✨ Multi-IA (Local N3, Gemini 3.x & Grok)** | **IA Local N3** gratuita para Trial e PRO + motores em nuvem **Google Gemini 3.x** e **xAI Grok** para Assinantes PRO e ADM. |
+| **💰 CRM SQLite & Preços Justos (Exclusivo ADM)** | Banco SQLite de clientes (`Nome`, `Telefone`, `WhatsApp`), catálogo de preços médios justos (sem abuso) e gerador de Proposta Exclusiva para enviar no WhatsApp do cliente. |
 
-## 📂 Arquitetura de Diretórios do Projeto
+---
 
-```text
-AegisPulse-Toolkit/
-├── main.py                        # Inicializador do Servidor Local + Janela App Mode
-├── Iniciar_AegisPulse.bat         # Atalho 1-clique com elevação automática para Administrador
-├── Publicar_No_GitHub.bat         # Publicador automatizado para o GitHub
-├── build_exe.bat                  # Compilador para executável portátil (.exe) via PyInstaller
-├── config.example.json            # Modelo de configuração local
-├── requirements.txt               # Dependências opcionais para build .exe
-├── .gitignore                     # Protege config.json, banco SQLite de clientes e laudos privados
-├── LICENSE                        # Licença de Software Proprietário — Adriano Barboza
-├── README.md                      # Documentação principal e vitrine comercial no GitHub
-├── MANUAL_DE_INSTRUCOES.md        # Manual completo de uso (Trial, Assinante PRO e ADM Master)
-├── backend/
-│   ├── auth.py                    # Licenciamento 3 Níveis (Trial 4x, Assinante PRO e ADM) + Keygen HMAC
-│   ├── server.py                  # Servidor REST API v3.0
-│   ├── collectors/
-│   │   ├── hardware.py            # Hardware, Marca/Modelo, JEDEC RAM, VRAM 64-bit e Temperaturas °C
-│   │   ├── os_info.py             # Sistema Operacional, Build/UBR, Uptime, Defender e TPM 2.0
-│   │   ├── drivers_bios.py        # BIOS/UEFI, Drivers e integração Windows Update
-│   │   └── software.py            # Inventário, Winget, Desinstalador Universal e Debloat UWP
-│   └── services/
-│       ├── compatibility.py       # Matriz de Compatibilidade de Hardware & Upgrades do Setup
-│       ├── gaming_dll.py          # Engenharia PC Gamer, Gargalos, Runtimes e Auditoria de DLLs
-│       ├── network_tools.py       # Diagnóstico de Rede, Ping, Speedtest, DNS 1-Clique e Senhas Wi-Fi
-│       ├── maintenance.py         # Rotinas seguras de limpeza Temp, Rede, DISM e Ponto de Restauração
-│       ├── gemini_ai.py           # Motor Multi-IA: IA Local N3 (Trial/PRO) + Gemini 3.x & Grok (PRO)
-│       ├── admin_crm.py           # Banco SQLite de Clientes, Tabela de Preços Justos e Proposta Cliente
-│       └── html_reporter.py       # Gerador de Laudos Executivos em HTML5 / PDF de alta nitidez
-├── frontend/
-│   ├── index.html                 # Interface Gráfica SPA (12 Abas + Modal Comercial)
-│   ├── styles.css                 # Design System Dark Tech responsivo
-│   └── app.js                     # Controlador Frontend v3.0
-├── data/                          # Banco SQLite local (aegispulse_admin.db — ignorado no Git)
-├── reports/                       # Laudos e Propostas em HTML/PDF gerados localmente
-└── logs/                          # Histórico de auditoria das sessões
-```
+## ⚖️ Conformidade de Licenças de Ferramentas Externas Opcionais
 
-## 🔒 Aviso de Propriedade Intelectual e Restrição de Uso (Software Proprietário)
+O **AegisPulse IT Toolkit** opera nativamente com coletores e motores próprios em Python/PowerShell. Quando instaladas separadamente pelo técnico no sistema operacional, as ferramentas externas opcionais abaixo são invocadas apenas via interface de linha de comando (CLI) independente, respeitando integralmente suas licenças originais:
+- **smartmontools (`smartctl`):** GNU GPLv2+
+- **GNU `ddrescue`:** GNU GPLv2+
+- **TestDisk & PhotoRec (CGSecurity):** GNU GPLv2+
 
-**Copyright © 2026 Adriano Barboza (`adriano9200@gmail.com` | WhatsApp: `+55 61 98515-8434`). Todos os direitos reservados.**
+Nenhum código-fonte GPL dessas ferramentas é embutido ou redistribuído dentro do binário proprietário do AegisPulse.
 
-Este repositório é mantido público no GitHub **exclusivamente para fins de portfólio de engenharia de software e auditoria técnica de código**.  
-Nos termos da Lei de Software (Lei nº 9.609/98) e da Lei de Direitos Autorais (Lei nº 9.610/98), **NÃO É PERMITIDO** a terceiros sem licença formal emitida pelo autor:
-1. Utilizar comercialmente este software após o limite demonstrativo do Modo Trial sem adquirir uma Chave de Assinatura válida;
-2. Copiar, clonar para distribuição, modificar, remover travas de licenciamento (`backend/auth.py`) ou comercializar versões derivadas;
-3. Suprimir a identificação de autoria de **Adriano Barboza** em qualquer tela, código ou relatório gerado.
+---
+
+## 🛠️ Como Executar e Testar
+
+1. Dê dois cliques em **`Iniciar_AegisPulse.bat`** (ou execute `python main.py` como Administrador).
+2. Para rodar a suíte de testes automatizados (7 cenários completos com mocks não-destrutivos):
+   ```powershell
+   python -m unittest discover -s tests -p "test_*.py" -v
+   ```
+
+---
+
+**Desenvolvido por Adriano Barboza**  
+📱 **WhatsApp:** [+55 61 98515-8434](https://wa.me/5561985158434) | 📧 **E-mail:** `adriano9200@gmail.com`  
+*AegisPulse IT Toolkit v4.0.0 — Diagnóstico • Automação • Inteligência.*
