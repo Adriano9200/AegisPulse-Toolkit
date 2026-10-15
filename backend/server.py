@@ -1,3 +1,4 @@
+import sys
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -315,8 +316,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             if SESSION_STATE.get("last_snapshot"):
                 SESSION_STATE["last_snapshot"]["storage_suite"] = storage_suite
             log_action("Auditoria Forense de Discos & SMART", f"{storage_suite.get('total_physical_disks', 0)} dispositivo(s) analisado(s).")
-            self._send_json({"success": True, "storage_suite": storage_suite,
-                "health_score": health_eval, "action_logs": SESSION_STATE["action_logs"]})
+            self._send_json({"success": True, "storage_suite": storage_suite, "action_logs": SESSION_STATE["action_logs"]})
             return
 
         if route == "/api/admin/crm/list":
@@ -350,6 +350,8 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 return
 
         frontend_dir = base_dir / "frontend"
+        if not frontend_dir.exists() and getattr(sys, "_MEIPASS", None):
+            frontend_dir = Path(sys._MEIPASS) / "frontend"
         if route == "/" or route == "/index.html":
             file_path = frontend_dir / "index.html"
         else:
