@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<!--
+================================================================================
+PROJETO: AegisPulse IT Toolkit — Diagnostic, Maintenance, Storage Forensics & AI
+ARQUIVO: frontend/index.html
+AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
+VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Multi-IA)
+================================================================================
+-->
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AegisPulse IT Toolkit v4.0 — Por Adriano Barboza</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- MODAL COMERCIAL DE 3 NÍVEIS: TRIAL (4 ANÁLISES + IA LOCAL), ASSINANTE PRO (GEMINI/GROK) E ADM MASTER -->
+    <div id="authModal" class="modal-overlay hidden">
+        <div class="modal-card" style="width:550px;text-align:left;">
+            <div style="text-align:center;margin-bottom:14px;">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                <div class="modal-badge" style="margin-top:6px;">DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</div>
+                <h2 style="margin-top:4px;">AegisPulse IT Toolkit v4.0</h2>
+                <p class="modal-sub"><strong>Tecnologia sob controle. Suporte com inteligência.</strong><br>Desenvolvido por Adriano Barboza • WhatsApp: <strong>+55 61 98515-8434</strong></p>
+            </div>
+
+            <!-- 1. MODO TRIAL (4 ANÁLISES GRATUITAS + IA LOCAL) -->
+            <div class="maint-card" style="margin-bottom:12px;border-color:rgba(56,189,248,0.4);">
+                <div class="flex-between">
+                    <div>
+                        <h4 style="color:#38bdf8;">⏳ 1. Modo Trial Gratuito (4 Análises + IA Local N3)</h4>
+                        <p class="muted" id="trialModalStatusText">Experimente até 4 diagnósticos completos com IA Local N3 gratuitamente.</p>
+                    </div>
+                    <button class="btn primary" id="btnStartTrial">🚀 Entrar no Modo Trial</button>
+                </div>
+            </div>
+
+            <!-- 2. MODO USUÁRIO ASSINANTE PRO -->
+            <div class="maint-card" style="margin-bottom:12px;border-color:rgba(16,185,129,0.4);">
+                <div class="flex-between">
+                    <div>
+                        <h4 style="color:#10b981;">⭐ 2. Acesso Assinante PRO (Ilimitado + IA Gemini & Grok)</h4>
+                        <p class="muted">Libera análises ilimitadas, laudos PDF e IA em nuvem (Google Gemini & Grok):</p>
+                    </div>
+                    <a href="https://wa.me/5561985158434?text=Ol%C3%A1%20Adriano%20Barboza!%20Quero%20adquirir%20uma%20Assinatura%20PRO%20do%20AegisPulse%20IT%20Toolkit!" target="_blank" class="btn secondary" style="border:1px solid #10b981;color:#34d399;">📲 Assinar via WhatsApp</a>
+                </div>
+                <div class="input-group" style="margin-top:8px;">
+                    <input type="text" id="subKeyInput" placeholder="Cole sua chave: AEGIS-PRO-AAAAMMDD-CLIENTE-ASSINATURA" autocomplete="off">
+                    <button class="btn primary" id="btnLoginSubscriber" style="background:#10b981;color:#fff;">Ativar Chave PRO</button>
+                </div>
+            </div>
+
+            <!-- 3. MODO ADMINISTRADOR MASTER (ADRIANO BARBOZA) -->
+            <div class="maint-card">
+                <h4 style="color:#f59e0b;">👑 3. Acesso Exclusivo ADM Master (Adriano Barboza)</h4>
+                <p class="muted">Libera CRM SQLite de Clientes, Tabela de Preços Justos, Orçamento Exclusivo e Keygen:</p>
+                <div class="input-group" style="margin-top:6px;">
+                    <input type="password" id="pinInput" placeholder="Digite sua Senha Master de Administrador" autocomplete="off">
+                    <button class="btn secondary" id="btnUnlock">Entrar como ADM</button>
+                </div>
+            </div>
+
+            <p id="authError" class="error-text hidden" style="text-align:center;font-weight:600;margin-top:12px;"></p>
+        </div>
+    </div>
+
+    <div class="app-layout">
+        <!-- BARRA LATERAL -->
+        <aside class="sidebar">
+            <div class="brand" style="flex-direction:column;align-items:flex-start;gap:6px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div class="brand-icon">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    </div>
+                    <div>
+                        <h1 style="line-height:1.1;">AegisPulse</h1>
+                        <span style="color:#38bdf8;font-weight:700;letter-spacing:1px;font-size:10.5px;">IT TOOLKIT v4.0</span>
+                    </div>
+                </div>
+                <div style="font-size:11px;color:#e2e8f0;font-weight:600;margin-top:2px;">Diagnóstico • Automação • Inteligência</div>
+                <div style="font-size:10.5px;color:#94a3b8;font-style:italic;">Tecnologia sob controle. Suporte com inteligência.</div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="tab-dashboard">
+                    <span>📊</span> Visão Geral & Temps
+                </button>
+                <button class="nav-item" data-tab="tab-healthscore" style="border-left:3px solid #10b981;">
+                    <span>🩺</span> Health Score (Índice de Saúde)
+                </button>
+                <button class="nav-item" data-tab="tab-storage" style="border-left:3px solid #38bdf8;">
+                    <span>💿</span> Discos, SMART & Recuperação
+                </button>
+                <button class="nav-item" data-tab="tab-hardware">
+                    <span>🖥️</span> Hardware & Memória
+                </button>
+                <button class="nav-item" data-tab="tab-compatibility">
+                    <span>🧩</span> Compatibilidade & Setup
+                </button>
+                <button class="nav-item" data-tab="tab-drivers">
+                    <span>⚙️</span> Drivers & BIOS
+                </button>
+                <button class="nav-item" data-tab="tab-software">
+                    <span>📦</span> Softwares & Debloat
+                </button>
+                <button class="nav-item" data-tab="tab-network">
+                    <span>🌐</span> Rede & Internet
+                </button>
+                <button class="nav-item" data-tab="tab-gaming">
+                    <span>🎮</span> PC Gamer & DLLs
+                </button>
+                <button class="nav-item" data-tab="tab-maintenance">
+                    <span>🧰</span> Manutenção & Reparo
+                </button>
+                <button class="nav-item" data-tab="tab-gemini">
+                    <span>✨</span> IA Local, Gemini & Grok
+                </button>
+                <button class="nav-item" data-tab="tab-logs">
+                    <span>📄</span> Relatórios & Logs HTML
+                </button>
+
+                <!-- ABAS EXCLUSIVAS DO ADMINISTRADOR MASTER (OCULTAS PARA TRIAL E ASSINANTES COMUNS) -->
+                <button class="nav-item hidden" id="navCrmTab" data-tab="tab-crm" style="border:1px solid rgba(16,185,129,0.4);color:#34d399;margin-top:4px;">
+                    <span>💰</span> ADM: Clientes & Preços
+                </button>
+                <button class="nav-item hidden" id="navAdminTab" data-tab="tab-admin" style="border:1px solid rgba(245,158,11,0.4);color:#fbbf24;">
+                    <span>👑</span> ADM: Licenças & Keygen
+                </button>
+            </nav>
+
+            <div class="author-box">
+                <div class="author-label">DESENVOLVIDO POR</div>
+                <div class="author-name">Adriano Barboza</div>
+                <div class="author-mail">📱 +55 61 98515-8434</div>
+                <div class="author-mail">adriano9200@gmail.com</div>
+            </div>
+        </aside>
+
+        <!-- ÁREA PRINCIPAL -->
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <h2 id="machineTitle">Carregando diagnóstico do equipamento...</h2>
+                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse v4.0 inspeciona o sistema e os discos</p>
+                </div>
+                <div class="topbar-actions">
+                    <span id="licenseBadge" class="status-pill" style="border-color:#38bdf8;color:#38bdf8;">Verificando Licença...</span>
+                    <a href="https://wa.me/5561985158434?text=Ol%C3%A1%20Adriano%20Barboza!%20Quero%20assinar%20o%20AegisPulse%20PRO!" target="_blank" id="btnTopSubscribeWa" class="btn secondary hidden" style="border:1px solid #10b981;color:#34d399;">📲 Assinar PRO (WhatsApp)</a>
+                    <span id="netBadge" class="status-pill">Verificando Rede...</span>
+                    <button class="btn secondary" id="btnSwitchAccount">🔐 Trocar Perfil</button>
+                    <button class="btn secondary" id="btnRescan">🔄 Atualizar Diagnóstico</button>
+                    <button class="btn primary" id="btnExportHtml">📄 Gerar Laudo HTML / PDF</button>
+                </div>
+            </header>
+
+            <div id="statusToast" class="toast hidden"></div>
+
+            <!-- ABA 1: VISÃO GERAL, SO & TEMPERATURAS -->
+            <section id="tab-dashboard" class="tab-panel active">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <span class="kpi-label">FABRICANTE & MODELO</span>
+                        <strong id="kpiModel">—</strong>
+                        <small id="kpiSerial" class="muted">Serial / Tag: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">SISTEMA OPERACIONAL & BUILD</span>
+                        <strong id="kpiOS">—</strong>
+                        <small id="kpiBuild" class="muted">Build: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">TEMPERATURA ATUAL CPU & GPU</span>
+                        <strong id="kpiTemps" style="color:#38bdf8;">—</strong>
+                        <small id="kpiTempStatus" class="muted">Status Térmico: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">SAÚDE DE DISCOS, DRIVERS & APPS</span>
+                        <strong id="kpiAlerts">—</strong>
+                        <small id="kpiBiosStatus" class="muted">BIOS: —</small>
+                    </div>
+                    <div class="kpi-card" style="border-color:rgba(16,185,129,0.4);">
+                        <span class="kpi-label">ÍNDICE GERAL HEALTH SCORE</span>
+                        <strong id="kpiHealthScore" style="color:#10b981;">—</strong>
+                        <small id="kpiHealthCoverage" class="muted">Cobertura: —</small>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Detalhes do Sistema Operacional e Build</h3>
+                        <div id="osDetailsList" class="kv-list"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>Segurança, Defender, Firmware & Sensores Térmicos</h3>
+                        <div id="securityDetailsList" class="kv-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA NOVO: HEALTH SCORE (ÍNDICE INTELIGENTE DE SAÚDE) -->
+            <section id="tab-healthscore" class="tab-panel">
+                <!-- CABEÇALHO EXECUTIVO E PONTUAÇÃO GERAL -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:5px solid #10b981;">
+                    <div class="flex-between">
+                        <div>
+                            <div class="flex-row" style="gap:8px;align-items:center;">
+                                <h2 style="font-size:20px;color:var(--text);margin:0;">🩺 AegisPulse Health Score — Índice de Saúde do Computador</h2>
+                                <span class="badge ok" id="hsVersionBadge">v4.5</span>
+                            </div>
+                            <p class="muted" style="margin-top:4px;">Avaliação técnica determinística baseada em 8 categorias ponderadas, trilha de auditoria e análise de tendências.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn primary" id="btnEvaluateHealthScore">⚡ Recalcular Health Score Agora</button>
+                            <button class="btn secondary" id="btnCompareHealthScore">📊 Comparar com Avaliação Anterior</button>
+                            <button class="btn secondary" id="btnToggleAuditTrail">🔍 Ver Trilha de Deduções</button>
+                        </div>
+                    </div>
+
+                    <!-- CARD DE DESTAQUE DA NOTA -->
+                    <div class="kpi-grid" style="margin-top:16px;grid-template-columns: 1.2fr 1fr 1fr 1.5fr;">
+                        <div class="kpi-card" style="background:rgba(15,23,42,0.85);text-align:center;padding:16px;">
+                            <span class="kpi-label">PONTUAÇÃO GERAL DETERMINÍSTICA</span>
+                            <div style="font-size:38px;font-weight:900;line-height:1.1;margin:6px 0;" id="hsOverallScoreBig">—</div>
+                            <span class="badge ok" id="hsClassBadge" style="font-size:13px;padding:3px 12px;">Aguardando Coleta</span>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">COBERTURA DA AVALIAÇÃO</span>
+                            <strong id="hsCoverageCountText">—</strong>
+                            <small class="muted" id="hsCoveragePctText">0% das categorias disponíveis</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">IDENTIFICADOR NÃO-VOLÁTIL</span>
+                            <code id="hsMachineUuidText" style="font-size:12px;">—</code>
+                            <small class="muted" id="hsHostText">Host: —</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">STATUS TÉCNICO & TRAVA CRÍTICA</span>
+                            <div id="hsCriticalCapNotice" style="font-size:12.5px;font-weight:600;color:#34d399;">Sem falhas críticas bloqueantes</div>
+                            <small class="muted" id="hsEvaluatedAtText">Data: —</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAINEL COMPARATIVO / DIFF INTELIGENTE (OCULTO ATÉ SER SOLICITADO) -->
+                <div id="hsComparisonPanel" class="panel-card hidden" style="margin-bottom:16px;border-left:4px solid #f59e0b;">
+                    <div class="flex-between">
+                        <div>
+                            <h3 style="color:#f59e0b;">📊 Comparação Temporal com Avaliação Anterior (Diff de Tendência)</h3>
+                            <p class="muted" id="hsCompareTrendSummary">Analisando evolução métrica entre duas coletas...</p>
+                        </div>
+                        <button class="btn secondary" onclick="document.getElementById('hsComparisonPanel').classList.add('hidden')">✕ Fechar Comparativo</button>
+                    </div>
+                    <div class="kpi-grid" style="margin-top:12px;">
+                        <div class="kpi-card">
+                            <span class="kpi-label">VARIAÇÃO DA NOTA</span>
+                            <strong id="hsDiffScoreDelta">—</strong>
+                            <small class="muted" id="hsDiffDates">—</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">VARIAÇÃO DE COBERTURA</span>
+                            <strong id="hsDiffCoverageDelta">—</strong>
+                            <small class="muted">Diferença de sensores ativos</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">NOVOS PROBLEMAS</span>
+                            <strong id="hsDiffNewCount" style="color:#ef4444;">0</strong>
+                            <small class="muted">Alertas adicionados</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">PROBLEMAS RESOLVIDOS</span>
+                            <strong id="hsDiffResolvedCount" style="color:#10b981;">0</strong>
+                            <small class="muted">Falhas saneadas</small>
+                        </div>
+                    </div>
+                    <div id="hsDiffDetailsList" style="margin-top:12px;" class="kv-list"></div>
+                </div>
+
+                <!-- TRILHA DE AUDITORIA & EXPLICABILIDADE (OCULTO ATÉ SER SOLICITADO) -->
+                <div id="hsAuditPanel" class="panel-card hidden" style="margin-bottom:16px;border-left:4px solid #38bdf8;">
+                    <div class="flex-between">
+                        <div>
+                            <h3 style="color:#38bdf8;">🔍 Trilha de Auditoria & Justificativa da Pontuação</h3>
+                            <p class="muted">Transparência total sobre todos os fatores que reduziram a nota a partir da base 100.</p>
+                        </div>
+                        <button class="btn secondary" onclick="document.getElementById('hsAuditPanel').classList.add('hidden')">✕ Fechar Auditoria</button>
+                    </div>
+                    <div class="table-scroll" style="margin-top:12px;max-height:260px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Categoria</th><th>Pontos Deduzidos</th><th>Motivo / Evidência Técnica Observada</th></tr>
+                            </thead>
+                            <tbody id="hsAuditTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 8 CATEGORIAS PONDERADAS -->
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between" style="margin-bottom:12px;">
+                        <div>
+                            <h3>Desempenho por Categoria Avaliada (8 Pilares)</h3>
+                            <p class="muted">Cada categoria possui pontuação própria, peso normalizado, evidências reais e estado de integridade.</p>
+                        </div>
+                        <span class="badge ok">100% Determinístico</span>
+                    </div>
+                    <div class="catalog-grid" id="hsCategoriesGrid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));"></div>
+                </div>
+
+                <!-- DIAGNÓSTICO ACIONÁVEL PRIORIZADO -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #ef4444;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>⚠️ Diagnóstico Acionável Priorizado (Problemas Detectados & Plano de Ação)</h3>
+                            <p class="muted">Ordenado estritamente por gravidade e risco aos dados: Falhas Críticas > Estabilidade > Desempenho > Preventivo.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn secondary active" onclick="filterFindings('TODOS', this)">Todos (<span id="countFindingsAll">0</span>)</button>
+                            <button class="btn secondary" onclick="filterFindings('CRÍTICO', this)" style="color:#ef4444;">Críticos (<span id="countFindingsCrit">0</span>)</button>
+                            <button class="btn secondary" onclick="filterFindings('ALTO', this)" style="color:#f97316;">Altos (<span id="countFindingsHigh">0</span>)</button>
+                            <button class="btn secondary" onclick="filterFindings('MÉDIO', this)" style="color:#f59e0b;">Médios (<span id="countFindingsMed">0</span>)</button>
+                        </div>
+                    </div>
+                    <div class="table-scroll" style="margin-top:12px;max-height:360px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Problema / Componente</th>
+                                    <th>Severidade</th>
+                                    <th>Impacto Provável</th>
+                                    <th>Evidência Técnica Observada</th>
+                                    <th>Grau de Confiança</th>
+                                    <th>Recomendação Técnica</th>
+                                    <th>Risco da Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hsFindingsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- HISTÓRICO PERSISTENTE SQLITE & GRÁFICO DE TENDÊNCIAS -->
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Evolução Histórica da Pontuação (Persistência SQLite)</h3>
+                        <p class="muted" style="margin-bottom:8px;">Acompanhamento contínuo da pontuação ao longo das semanas de suporte.</p>
+                        <div id="hsHistoryChartBox" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;min-height:140px;"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>Avaliações Registradas na Base de Dados</h3>
+                        <p class="muted" style="margin-bottom:8px;">Histórico armazenado em <code>data/aegispulse_storage.db</code>.</p>
+                        <div class="table-scroll" style="max-height:210px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Data/Hora</th><th>Nota</th><th>Classificação</th><th>Cobertura</th><th>Falha Crítica</th><th>Ação</th></tr>
+                                </thead>
+                                <tbody id="hsHistoryTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA NOVA COMPLETA v4.0: DISCOS, SMART, VIDA ÚTIL, TESTES & RECUPERAÇÃO ASSISTIDA (10 SEÇÕES) -->
+            <section id="tab-storage" class="tab-panel">
+                <!-- CABEÇALHO E SELETOR DE DISCO ATIVO -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #38bdf8;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>💿 Central Profissional de Diagnóstico, Saúde SMART, Vida Útil & Recuperação de Armazenamento (v4.0)</h3>
+                            <p class="muted">Suporte a HDDs Mecânicos, SSDs SATA, SSDs NVMe, Pendrives USB e Unidades Externas — Com proteção não-destrutiva e persistência SQLite.</p>
+                        </div>
+                        <div class="btn-row">
+                            <select id="storageDeviceSelect" class="full-input" style="min-width:290px;"></select>
+                            <select id="storageImportanceSelect" class="full-input" style="width:190px;" title="Importância dos Dados">
+                                <option value="alta" selected>Dados: Alta Importância</option>
+                                <option value="critica_missao">Dados: Missão Crítica</option>
+                                <option value="media">Dados: Importância Moderada</option>
+                                <option value="baixa">Dados: Substituíveis</option>
+                            </select>
+                            <button class="btn primary" id="btnRefreshStorage">🔄 Re-escanear Discos & SMART</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. INVENTÁRIO AVANÇADO DE DISPOSITIVOS DE ARMAZENAMENTO -->
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <h3>1. Inventário Avançado de Dispositivos de Armazenamento (Bytes, GB/TB Decimal vs GiB/TiB Binário)</h3>
+                    <div class="table-scroll">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Disco #</th>
+                                    <th>Marca / Modelo</th>
+                                    <th>Série / Firmware</th>
+                                    <th>Mídia / Interface / Protocolo</th>
+                                    <th>Capacidade (Decimal vs Binária)</th>
+                                    <th>Estilo / Unidades</th>
+                                    <th>Estado / Risco</th>
+                                </tr>
+                            </thead>
+                            <tbody id="storageInventoryTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 2. DETALHES DO DISPOSITIVO & CLASSIFICAÇÃO DE RISCO E SEGURANÇA -->
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>2. Detalhes Técnicos do Dispositivo & Controlador</h3>
+                        <div id="storageDeviceDetailsBox" class="kv-list"></div>
+                        <div id="storageAdapterLimitsBox" style="margin-top:10px;"></div>
+                    </div>
+                    <div class="panel-card" id="storageRiskCard" style="border-left:4px solid #10b981;">
+                        <h3>8. Classificação de Risco, Segurança & Plano de Ação Ordenado</h3>
+                        <div id="storageRiskSummaryBox" class="kv-list"></div>
+                        <div style="margin-top:10px;">
+                            <strong style="color:#38bdf8;font-size:13px;">Plano de Ação Ordenado por Menor Risco aos Dados:</strong>
+                            <ul id="storageOrderedPlanList" style="padding-left:18px;margin-top:6px;font-size:13px;line-height:1.55;"></ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. SAÚDE SMART PROFUNDA & 4. ESTIMATIVA DE VIDA ÚTIL E DESGASTE -->
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>4. Estimativa de Vida Útil, TBW, Horas Ligadas (POH) & Desgaste</h3>
+                        <div id="storageLifespanBox" class="kv-list"></div>
+                        <div id="storageForecastDisclaimer" class="maint-card" style="margin-top:10px;font-size:12.5px;border-color:rgba(56,189,248,0.35);"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>5. Monitoramento Histórico Persistente (SQLite) & Tendências</h3>
+                        <div id="storageDegradationAlertsBox" style="margin-bottom:8px;"></div>
+                        <div id="storageHistoryChartBox" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;min-height:125px;"></div>
+                        <div class="table-scroll" style="max-height:150px;margin-top:8px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Data Coleta</th><th>Temp</th><th>POH (h)</th><th>Gravações</th><th>Desgaste</th><th>Realoc./Pend.</th><th>Score</th></tr>
+                                </thead>
+                                <tbody id="storageHistoryTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TABELA PROFUNDA DE ATRIBUTOS SMART (HDD / SATA SSD / NVMe) -->
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>3. Diagnóstico SMART Profundo — Atributos Brutos, Normalizados, Limiares & Significado Técnico</h3>
+                            <p class="muted">Distingue atributos de HDDs, SSDs SATA e SSDs NVMe sem inventar métricas ocultas pela controladora.</p>
+                        </div>
+                        <span id="smartSupportBadge" class="badge ok">SMART Ativo</span>
+                    </div>
+                    <div class="table-scroll" style="max-height:320px;margin-top:10px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Atributo SMART / NVMe</th>
+                                    <th>Atual / Pior / Limiar</th>
+                                    <th>Valor Bruto (Hex / Int)</th>
+                                    <th>Valor Interpretado</th>
+                                    <th>Gravidade</th>
+                                    <th>Significado Técnico & Notas do Fabricante</th>
+                                </tr>
+                            </thead>
+                            <tbody id="storageSmartTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 6. TESTES DE INTEGRIDADE E DESEMPENHO -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #10b981;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>6. Testes Reais e Controlados de Integridade, Throughput (MB/s), Latência (ms) & Superfície</h3>
+                            <p class="muted">Por padrão, todos os testes são 100% somente-leitura (não-destrutivos). O teste de escrita exige confirmação explícita.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn primary" onclick="runStorageTest('quick_health')">⚡ Verificação Rápida</button>
+                            <button class="btn secondary" onclick="runStorageTest('read_benchmark')">🚀 Benchmark de Leitura (Sequencial/Blocos)</button>
+                            <button class="btn secondary" onclick="runStorageTest('surface_scan')">🔍 Varredura de Superfície</button>
+                            <button class="btn secondary" onclick="runStorageTest('smart_short')">🩺 Autoteste SMART Curto</button>
+                            <button class="btn secondary" onclick="runStorageTest('smart_extended')">🛡️ Autoteste SMART Estendido</button>
+                            <button class="btn danger" onclick="runStorageWriteTestPrompt()">⚠️ Teste de Escrita (Confirmar)</button>
+                        </div>
+                    </div>
+                    <div id="storageTestProgressBox" class="maint-card" style="margin-top:12px;">
+                        Selecione um dos testes acima para medir velocidade (MB/s), tempo de resposta (ms), IOPS, blocos lentos (&gt;150ms) e erros de leitura...
+                    </div>
+                </div>
+
+                <!-- 7. DIAGNÓSTICO ESPECIALIZADO DE ERROS & 8. PARTIÇÕES E SISTEMAS DE ARQUIVOS -->
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>7. Diagnóstico Especializado de Falhas (CRC, RAW, Eventos, USB & Pendrives)</h3>
+                        <p class="muted" style="margin-bottom:8px;">Diferencia falhas físicas, problemas de cabo/conexão (CRC), corrupção lógica e limitações do SO:</p>
+                        <div id="storageFaultsListBox"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>8. Partições, Volumes Lógicos & Sistemas de Arquivos (GPT / MBR / RAW)</h3>
+                        <div class="table-scroll" style="max-height:290px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Partição / Letra</th><th>Rótulo</th><th>Sistema Arq.</th><th>Capacidade (GB / GiB)</th><th>Livre (GiB)</th><th>Ocupação / Status</th></tr>
+                                </thead>
+                                <tbody id="storagePartitionsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 9. RECUPERAÇÃO ASSISTIDA E PRESERVAÇÃO DE DADOS -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #f59e0b;">
+                    <h3>9. Recuperação Assistida e Preservação de Dados (Imagem/Clonagem com Mapfile, Partições, Arquivos & CHKDSK Seguro)</h3>
+                    <p class="muted" style="margin-bottom:12px;">
+                        Fluxo profissional que avalia os riscos antes de tocar no dispositivo, bloqueia Origem == Destino e impede reparos destrutivos automáticos em discos com falha física.
+                    </p>
+
+                    <div class="two-col" style="margin-bottom:14px;">
+                        <!-- 9A. CLONAGEM E CRIAÇÃO DE IMAGEM SETOR-A-SETOR COM MAPFILE E RETOMADA -->
+                        <div class="maint-card">
+                            <h4 style="color:#38bdf8;">📀 A. Clonagem / Criação de Imagem Resiliente (.img + Mapfile / GNU ddrescue)</h4>
+                            <p class="muted" style="margin-bottom:8px;">Cria ou retoma uma imagem binária isolando blocos defeituosos em Mapfile sem travar a leitura.</p>
+                            <label class="field-label">Arquivo de Imagem de Destino (Deve estar em OUTRA unidade física)</label>
+                            <input type="text" id="recImageDestInput" class="full-input" placeholder="Ex: D:\Recuperacao_AegisPulse\disco_cliente.img">
+                            <div class="two-col" style="margin-top:8px;">
+                                <div>
+                                    <label class="field-label">Amostra / Limite (MB)</label>
+                                    <input type="number" id="recImageMaxMbInput" class="full-input" value="16" min="1" max="1048576">
+                                </div>
+                                <div>
+                                    <label class="field-label">Confirmação Obrigatória</label>
+                                    <input type="text" id="recImageConfirmInput" class="full-input" placeholder="Digite: CONFIRMAR_IMAGEM">
+                                </div>
+                            </div>
+                            <div class="btn-row" style="margin-top:10px;">
+                                <button class="btn primary" id="btnStartResumeImage">▶️ Iniciar / Retomar Imagem (.img)</button>
+                                <button class="btn danger" id="btnCancelImage">⏹️ Cancelar com Segurança (Salvar Mapfile)</button>
+                            </div>
+                        </div>
+
+                        <!-- 9B. RECUPERAÇÃO DE PARTIÇÕES (TESTDISK) E ARQUIVOS (PHOTOREC / CARVING) -->
+                        <div class="maint-card">
+                            <h4 style="color:#10b981;">📂 B. Recuperação de Partições (TestDisk) & Extração de Arquivos (PhotoRec)</h4>
+                            <p class="muted" style="margin-bottom:8px;">Inspeciona assinaturas MBR/GPT perdidas e recupera arquivos para outra unidade segura.</p>
+                            <label class="field-label">Pasta de Destino para Arquivos Recuperados (Em OUTRA unidade)</label>
+                            <input type="text" id="recFilesDestInput" class="full-input" placeholder="Ex: D:\Arquivos_Recuperados_Cliente">
+                            <label class="field-label" style="margin-top:8px;">Opcional: Analisar a partir do Arquivo de Imagem (.img) criado</label>
+                            <input type="text" id="recSourceImageInput" class="full-input" placeholder="Deixe em branco para inspecionar o disco selecionado ou cole o caminho do .img">
+                            <div class="btn-row" style="margin-top:10px;">
+                                <button class="btn secondary" id="btnInspectPartitions">🧩 Diagnosticar Partições (MBR/GPT & TestDisk)</button>
+                                <button class="btn primary" id="btnRecoverFiles" style="background:#10b981;color:#fff;">🔍 Recuperar Arquivos (PhotoRec / Assinaturas)</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 9C. REPARAÇÃO LÓGICA CONTROLADA (SEPARAÇÃO ENTRE DIAGNÓSTICO, VERIFICAÇÃO E REPARO) -->
+                    <div class="maint-card">
+                        <div class="flex-between">
+                            <div>
+                                <h4 style="color:#f59e0b;">🛠️ C. Reparação Lógica Controlada Windows (CHKDSK / Repair-Volume)</h4>
+                                <p class="muted">Separa Diagnóstico Passivo, Verificação Somente-Leitura e Reparação Ativa (bloqueada automaticamente se houver falha física SMART).</p>
+                            </div>
+                            <div class="btn-row">
+                                <input type="text" id="recLogicalDriveInput" class="search-input" style="width:90px;" value="C:" placeholder="Ex: E:">
+                                <input type="text" id="recLogicalConfirmInput" class="search-input" style="width:230px;" placeholder="Para reparo: CONFIRMAR_REPARO_LOGICO">
+                                <button class="btn secondary" onclick="runLogicalRepairMode('diagnose_only')">1. Diagnóstico Passivo</button>
+                                <button class="btn secondary" onclick="runLogicalRepairMode('verify_readonly')">2. Verificar (Somente-Leitura)</button>
+                                <button class="btn danger" onclick="runLogicalRepairMode('repair_active')">3. Executar Reparo Lógico</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <pre id="storageRecoveryOutputBox" class="terminal-box" style="margin-top:12px;min-height:140px;">Aguardando operação de recuperação assistida, criação de imagem ou inspeção de partições...</pre>
+                </div>
+
+                <!-- 10. LOGS E HISTÓRICO DE OPERAÇÕES DE ARMAZENAMENTO -->
+                <div class="panel-card">
+                    <h3>10. Logs e Histórico Persistente de Operações de Armazenamento (SQLite)</h3>
+                    <div class="table-scroll" style="max-height:240px;margin-top:8px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Data/Hora</th><th>Dispositivo</th><th>Operação</th><th>Risco</th><th>Status</th><th>Resumo Técnico</th></tr>
+                            </thead>
+                            <tbody id="storageOpsLogTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 3: HARDWARE, TEMPERATURAS & MEMÓRIA -->
+            <section id="tab-hardware" class="tab-panel">
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Placa-Mãe, CPU, GPUs & Temperaturas em Tempo Real (°C)</h3>
+                        <div id="hwCoreList" class="kv-list"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>Módulos de Memória RAM Instalados (Decodificador JEDEC Ativo)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Slot</th><th>Fabricante Real</th><th>Part Number</th><th>Capacidade</th><th>Velocidade</th></tr>
+                            </thead>
+                            <tbody id="ramTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="panel-card" style="margin-top:16px;">
+                    <h3>Resumo de Unidades Físicas e Partições Lógicas</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Unidade / Modelo</th><th>Tipo / Interface</th><th>Capacidade</th><th>Livre</th><th>Uso / Saúde SMART</th></tr>
+                        </thead>
+                        <tbody id="diskTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ABA 4: COMPATIBILIDADE DE HARDWARE & UPGRADES DO SETUP -->
+            <section id="tab-compatibility" class="tab-panel">
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #38bdf8;">
+                    <h3>🧩 Matriz Completa de Compatibilidade de Hardware & Upgrades (De Acordo com Todo o Setup)</h3>
+                    <p class="muted">Análise cruzada entre Placa-Mãe, Socket da CPU, Geração de Memória RAM, Barramentos NVMe/SATA, Placa de Vídeo, Fonte Recomendada (PSU) e Windows 11.</p>
+                </div>
+
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>1. Processador (CPU) & Placa-Mãe</h3>
+                        <div id="compatCpuBox" class="kv-list"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>2. Memória RAM & Expansão Compatível</h3>
+                        <div id="compatRamBox" class="kv-list"></div>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>3. Placa de Vídeo (PCIe x16) & Fonte Recomendada (PSU)</h3>
+                        <div id="compatGpuBox" class="kv-list"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>4. Armazenamento (M.2 NVMe / SATA) & Conformidade Windows 11</h3>
+                        <div id="compatStorageOsBox" class="kv-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 5: DRIVERS & BIOS -->
+            <section id="tab-drivers" class="tab-panel">
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>Diagnóstico de BIOS / UEFI e Atualização de Drivers</h3>
+                            <p class="muted">Distingue drivers nativos do Windows (2006) de drivers antigos reais e lista atualizações do Windows Update em tabela.</p>
+                        </div>
+                        <div class="btn-row">
+                            <a id="btnVendorSupport" href="#" target="_blank" class="btn secondary">🌐 Página Oficial do Fabricante (BIOS/Drivers)</a>
+                            <button class="btn secondary" id="btnScanWuDrivers">🔍 Buscar Drivers no Windows Update</button>
+                            <button class="btn primary" id="btnInstallWuDrivers">⚡ Instalar Drivers via Windows Update</button>
+                        </div>
+                    </div>
+                    <div id="biosSummaryBox" class="kv-grid" style="margin-top:14px;"></div>
+                    <div id="wuDriversResult" class="hidden" style="margin-top:14px;"></div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="flex-between" style="margin-bottom:12px;">
+                        <h3>Inventário de Drivers Instalados</h3>
+                        <input type="text" id="driverSearchInput" class="search-input" placeholder="Filtrar driver por nome, classe ou fabricante...">
+                    </div>
+                    <div class="table-scroll">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Dispositivo</th><th>Classe</th><th>Fabricante</th><th>Versão</th><th>Data</th><th>Status</th></tr>
+                            </thead>
+                            <tbody id="driversTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 6: SOFTWARES, DESINSTALADOR & DEBLOAT -->
+            <section id="tab-software" class="tab-panel">
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>1. Softwares Obsoletos Detectados (Integração Winget)</h3>
+                            <p class="muted">Compare a versão instalada com a versão oficial mais recente e atualize em 1 clique.</p>
+                        </div>
+                        <button class="btn primary" id="btnUpgradeAllSw">🚀 Atualizar Todos os Obsoletos</button>
+                    </div>
+                    <table class="data-table" style="margin-top:12px;">
+                        <thead>
+                            <tr><th>Software</th><th>ID do Pacote</th><th>Versão Atual</th><th>Versão Nova</th><th>Ação</th></tr>
+                        </thead>
+                        <tbody id="outdatedSwTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>2. Removedor Seguro de Bloatware (<span id="bloatwareCount">0</span> detectados)</h3>
+                            <p class="muted">Apps pré-instalados do Windows (Cortana, Bing News, Solitaire, Feedback Hub, Clipchamp, etc.) que consomem recursos em segundo plano.</p>
+                        </div>
+                        <button class="btn danger" id="btnRemoveAllBloatware">🧹 Remover Todos os Bloatwares Detectados</button>
+                    </div>
+                    <table class="data-table" style="margin-top:12px;">
+                        <thead>
+                            <tr><th>Aplicativo Pré-Instalado (UWP)</th><th>Pacote Técnico</th><th>Descrição</th><th>Ação</th></tr>
+                        </thead>
+                        <tbody id="bloatwareTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <h3>3. Instalador Rápido — Kit Essencial Pós-Formatação (1-Clique)</h3>
+                    <div id="catalogGrid" class="catalog-grid"></div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="flex-between" style="margin-bottom:12px;">
+                        <h3>4. Inventário Completo & Desinstalador Universal (<span id="swTotalCount">0</span> programas)</h3>
+                        <input type="text" id="swSearchInput" class="search-input" placeholder="Buscar programa para inspecionar ou desinstalar...">
+                    </div>
+                    <div class="table-scroll">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Nome do Programa</th><th>Versão</th><th>Fabricante</th><th>Instalação</th><th>Desinstalar</th></tr>
+                            </thead>
+                            <tbody id="installedSwTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 7: REDE & INTERNET -->
+            <section id="tab-network" class="tab-panel">
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>Adaptadores de Rede Ativos (IP, MAC, Gateway e DNS)</h3>
+                        <div id="netAdaptersBox"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>Teste de Latência (Ping) & Velocidade de Download</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Destino</th><th>Host</th><th>Status</th><th>Latência Média</th></tr>
+                            </thead>
+                            <tbody id="netPingsBody"></tbody>
+                        </table>
+                        <div class="flex-between" style="margin-top:14px;">
+                            <button class="btn primary" id="btnRunSpeedtest">🚀 Medir Velocidade de Download (Cloudflare CDN)</button>
+                            <strong id="speedtestResultText" style="color:var(--accent);"></strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Troca Rápida de DNS (1-Clique)</h3>
+                        <div class="maint-grid">
+                            <div class="maint-card">
+                                <h4>⚡ Cloudflare DNS (1.1.1.1)</h4>
+                                <p class="muted">Menor tempo de resposta para navegação e jogos online.</p>
+                                <button class="btn primary" onclick="setDnsPreset('cloudflare')">Aplicar Cloudflare</button>
+                            </div>
+                            <div class="maint-card">
+                                <h4>🌐 Google Public DNS (8.8.8.8)</h4>
+                                <p class="muted">Alta estabilidade para escritórios e serviços corporativos.</p>
+                                <button class="btn secondary" onclick="setDnsPreset('google')">Aplicar Google DNS</button>
+                            </div>
+                            <div class="maint-card">
+                                <h4>🛡️ Cloudflare Security (1.1.1.2)</h4>
+                                <p class="muted">Bloqueia domínios de Malware e Phishing automaticamente.</p>
+                                <button class="btn secondary" onclick="setDnsPreset('cloudflare_security')">Aplicar DNS Seguro</button>
+                            </div>
+                            <div class="maint-card">
+                                <h4>🔄 Restaurar DNS (DHCP)</h4>
+                                <p class="muted">Volta para o DNS padrão fornecido pelo roteador/operadora.</p>
+                                <button class="btn secondary" onclick="setDnsPreset('dhcp')">Restaurar Padrão</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-card">
+                        <div class="flex-between" style="margin-bottom:10px;">
+                            <div>
+                                <h3>Recuperador de Senhas de Wi-Fi Salvas</h3>
+                                <p class="muted">Exibe todas as redes Wi-Fi já conectadas neste Windows e suas senhas.</p>
+                            </div>
+                            <button class="btn primary" id="btnRecoverWifi">🔑 Revelar Senhas Wi-Fi</button>
+                        </div>
+                        <div class="table-scroll" style="max-height:240px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Nome da Rede (SSID)</th><th>Senha Salva</th></tr>
+                                </thead>
+                                <tbody id="wifiPasswordsBody">
+                                    <tr><td colspan="2">Clique em "Revelar Senhas Wi-Fi" para consultar os perfis WLAN do Windows.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 8: PC GAMER, TEMPERATURAS, RUNTIMES & DLLS -->
+            <section id="tab-gaming" class="tab-panel">
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #10b981;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>🎮 Análise Completa PC Gamer — GPU Dedicada, Temperaturas (°C), CPU, Memória Dual-Channel & Gargalos</h3>
+                            <p class="muted">Avaliação automática de engenharia de hardware para jogos, sensores térmicos, tecnologias suportadas e equilíbrio de componentes.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn primary" onclick="triggerGamingAction('repair_all_vc_directx')">🔧 Reparar Todas as DLLs (VC++ & DirectX)</button>
+                            <button class="btn secondary" onclick="triggerGamingAction('ultimate_power')">⚡ Ativar Energia Desempenho Máximo</button>
+                            <button class="btn secondary" onclick="triggerGamingAction('clean_shader_cache')">🧹 Limpar Cache de Shaders DirectX/GPU</button>
+                        </div>
+                    </div>
+
+                    <div class="kpi-grid" style="margin-top:14px;">
+                        <div class="kpi-card">
+                            <span class="kpi-label">CLASSIFICAÇÃO GAMER (TIER)</span>
+                            <strong id="gamerTierText" style="color:#34d399;">—</strong>
+                            <small id="gamerResText" class="muted">Resolução Alvo: —</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">GPU DEDICADA & TEMPERATURA</span>
+                            <strong id="gamerGpuName">—</strong>
+                            <small id="gamerGpuVram" class="muted">VRAM & Temp: —</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">CPU GAMER & TEMPERATURA</span>
+                            <strong id="gamerCpuName">—</strong>
+                            <small id="gamerCpuCores" class="muted">Núcleos & Temp: —</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">MEMÓRIA RAM & DUAL-CHANNEL</span>
+                            <strong id="gamerRamTotal">—</strong>
+                            <small id="gamerRamChannel" class="muted">Arquitetura: —</small>
+                        </div>
+                    </div>
+
+                    <div class="two-col" style="margin-top:10px;">
+                        <div class="maint-card">
+                            <h4>🚀 Tecnologias Gráficas & Vídeo Secundário (iGPU)</h4>
+                            <div id="gamerTechList" class="kv-list"></div>
+                        </div>
+                        <div class="maint-card">
+                            <h4>⚠️ Diagnóstico de Gargalos (Bottlenecks) & Alertas de SSD Gamer</h4>
+                            <ul id="gamerBottleneckList" style="padding-left:18px;font-size:13px;line-height:1.6;color:#e2e8f0;"></ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Auditoria de DLLs Críticas (<span id="missingDllsCount">0</span> ausentes em System32 / SysWOW64)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Arquivo DLL</th><th>Biblioteca</th><th>64-bit (System32)</th><th>32-bit (SysWOW64)</th><th>Ação</th></tr>
+                            </thead>
+                            <tbody id="dllAuditTableBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="panel-card">
+                        <h3>Instalador Individual de Runtimes para Jogos (Winget)</h3>
+                        <div id="gamingRuntimesGrid" class="catalog-grid"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 9: MANUTENÇÃO & REPARO -->
+            <section id="tab-maintenance" class="tab-panel">
+                <div class="panel-card">
+                    <h3>Execução de Rotinas Seguras de Manutenção e Reparo</h3>
+                    <div class="maint-grid">
+                        <div class="maint-card">
+                            <span class="badge ok">BAIXO RISCO</span>
+                            <h4>Criar Ponto de Restauração</h4>
+                            <p>Cria um ponto de restauração oficial no Windows antes de atualizar drivers ou alterar o sistema.</p>
+                            <button class="btn secondary" onclick="triggerMaintenance('create_restore_point')">Criar Checkpoint</button>
+                        </div>
+                        <div class="maint-card">
+                            <span class="badge ok">BAIXO RISCO</span>
+                            <h4>Limpeza Segura de Temporários</h4>
+                            <p>Remove arquivos órfãos em %TEMP% e Windows\Temp sem tocar em documentos ou senhas do cliente.</p>
+                            <button class="btn primary" onclick="triggerMaintenance('clean_temp')">Executar Limpeza</button>
+                        </div>
+                        <div class="maint-card">
+                            <span class="badge ok">BAIXO RISCO</span>
+                            <h4>Verificar Integridade (DISM)</h4>
+                            <p>Verifica se há corrupção na loja de componentes do Windows (DISM /CheckHealth).</p>
+                            <button class="btn secondary" onclick="triggerMaintenance('check_system_health')">Verificar Imagem</button>
+                        </div>
+                        <div class="maint-card">
+                            <span class="badge warn">RISCO MODERADO</span>
+                            <h4>Reparo Completo de Rede e DNS</h4>
+                            <p>Executa Flush DNS, Reset de catálogo Winsock e Reset da pilha TCP/IP para corrigir falhas de navegação.</p>
+                            <button class="btn secondary" onclick="triggerMaintenance('reset_network')">Reparar Rede</button>
+                        </div>
+                    </div>
+                    <pre id="maintOutputBox" class="terminal-box">Selecione uma rotina acima para visualizar o log de execução aqui...</pre>
+                </div>
+            </section>
+
+            <!-- ABA 10: IA LOCAL (TRIAL & PRO), GEMINI & GROK (ASSINANTES PRO) -->
+            <section id="tab-gemini" class="tab-panel">
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Central de Inteligência Artificial — IA Local N3, Google Gemini & xAI Grok</h3>
+                        <p class="muted" style="margin-bottom:10px;">
+                            A <strong>🧠 IA Local N3</strong> é liberada para todos (inclusive Modo Trial) e agora analisa profundamente a telemetria SMART, TBW e riscos de todos os discos! Os motores em nuvem <strong>✨ Google Gemini</strong> e <strong>🚀 xAI Grok / Groq</strong> são exclusivos para Assinantes PRO e ADM.
+                        </p>
+
+                        <label class="field-label">Escolha o Motor de Inteligência Artificial</label>
+                        <select id="aiProviderSelect" class="full-input" style="margin-bottom:10px;">
+                            <option value="local">🧠 IA Local AegisPulse N3 v4.0 (Instantânea & Gratuita — Liberada para Trial e PRO)</option>
+                            <option value="gemini">✨ Google Gemini 3.x Cloud AI (Exclusivo Assinante PRO & ADM)</option>
+                            <option value="grok">🚀 xAI Grok / Groq Cloud AI (Exclusivo Assinante PRO & ADM)</option>
+                        </select>
+
+                        <textarea id="geminiPromptInput" rows="3" placeholder="Opcional: faça uma pergunta específica sobre os discos, SMART, recuperação ou hardware (ou deixe em branco para gerar o Diagnóstico Forense Completo + Parecer para o Cliente)..."></textarea>
+                        <div class="btn-row" style="margin-top:10px;">
+                            <button class="btn primary" id="btnAskGemini">✨ Gerar Diagnóstico com IA Selecionada</button>
+                            <a href="https://wa.me/5561985158434?text=Ol%C3%A1%20Adriano%20Barboza!%20Quero%20assinar%20o%20AegisPulse%20PRO%20para%20liberar%20o%20Gemini%20e%20Grok!" target="_blank" class="btn secondary" style="border:1px solid #10b981;color:#34d399;">📲 Assinar PRO no WhatsApp (+55 61 98515-8434)</a>
+                        </div>
+                        <pre id="geminiOutputBox" class="terminal-box" style="min-height:240px;margin-top:14px;">Selecione o motor de IA acima e clique em "Gerar Diagnóstico com IA Selecionada"...</pre>
+                    </div>
+
+                    <div class="panel-card">
+                        <h3>Configurações de Chaves de IA & Segurança Local</h3>
+                        <p class="muted" style="margin-bottom:12px;">
+                            Suas chaves ficam salvas apenas no arquivo local <code>config.json</code> (ignorado pelo Git para nunca vazar no GitHub).
+                        </p>
+                        <label class="field-label">Chave Google Gemini API (Para Modo Assinante PRO / ADM)</label>
+                        <input type="password" id="cfgGeminiKey" class="full-input" placeholder="AIzaSy... ou AQ....">
+
+                        <label class="field-label" style="margin-top:12px;">Chave xAI Grok ou GroqCloud API (Para Modo Assinante PRO / ADM)</label>
+                        <input type="password" id="cfgGrokKey" class="full-input" placeholder="xai-... ou gsk_...">
+
+                        <label class="field-label" style="margin-top:12px;">Alterar Senha Master de Administrador (Exclusivo Adriano Barboza)</label>
+                        <input type="password" id="cfgNewPin" class="full-input" placeholder="Nova senha Master do ADM">
+
+                        <button class="btn primary" id="btnSaveConfig" style="margin-top:16px;">💾 Salvar Configurações Locais</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 11: RELATÓRIOS & LOGS HTML -->
+            <section id="tab-logs" class="tab-panel">
+                <div class="panel-card">
+                    <div class="flex-between">
+                        <div>
+                            <h3>Logs de Auditoria da Sessão & Exportação de Laudo HTML / PDF Executivo v4.0</h3>
+                            <p class="muted">Inclui Dossiê Forense de Discos & SMART, Temperaturas de CPU/GPU, Matriz de Compatibilidade, Seção PC Gamer e Parecer da IA.</p>
+                        </div>
+                        <button class="btn primary" onclick="exportHtmlReport()">📄 Gerar e Abrir Relatório HTML / PDF Agora</button>
+                    </div>
+                    <table class="data-table" style="margin-top:14px;">
+                        <thead>
+                            <tr><th>Horário</th><th>Operação</th><th>Resumo Técnico</th></tr>
+                        </thead>
+                        <tbody id="sessionLogsTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ABA 12 (EXCLUSIVA ADM): CRM SQLITE DE CLIENTES, PREÇOS JUSTOS & RELATÓRIO EXCLUSIVO PARA ENVIAR AO CLIENTE -->
+            <section id="tab-crm" class="tab-panel">
+                <div class="panel-card" style="border-left:4px solid #10b981;margin-bottom:16px;">
+                    <h3>💰 Painel Comercial ADM — Tabela de Preços Justos (Sem Abuso), CRM SQLite & Relatório Exclusivo do Cliente</h3>
+                    <p class="muted">
+                        Cadastre o cliente no banco de dados local <strong>SQLite</strong> (<code>data/aegispulse_admin.db</code>), marque os serviços necessários com valores justos de mercado e gere um <strong>Orçamento & Relatório Exclusivo em PDF / WhatsApp</strong> para enviar ao cliente!
+                    </p>
+                </div>
+
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>1. Dados do Cliente & Emissão de Relatório Exclusivo</h3>
+                        <label class="field-label">Nome Completo / Empresa do Cliente *</label>
+                        <input type="text" id="crmClientName" class="full-input" placeholder="Ex: Carlos Eduardo / Escritório Contábil Alfa">
+
+                        <div class="two-col" style="margin-top:10px;">
+                            <div>
+                                <label class="field-label">WhatsApp do Cliente (com DDD) *</label>
+                                <input type="text" id="crmClientWhatsapp" class="full-input" placeholder="Ex: 61 99999-8888">
+                            </div>
+                            <div>
+                                <label class="field-label">Telefone Alternativo</label>
+                                <input type="text" id="crmClientPhone" class="full-input" placeholder="Opcional">
+                            </div>
+                        </div>
+
+                        <div class="two-col" style="margin-top:10px;">
+                            <div>
+                                <label class="field-label">E-mail do Cliente</label>
+                                <input type="text" id="crmClientEmail" class="full-input" placeholder="Opcional">
+                            </div>
+                            <div>
+                                <label class="field-label">Desconto Especial (R$)</label>
+                                <input type="number" id="crmDiscountBrl" class="full-input" value="0" min="0" step="10">
+                            </div>
+                        </div>
+
+                        <label class="field-label" style="margin-top:10px;">Observações e Recomendações para o Cliente</label>
+                        <textarea id="crmClientNotes" rows="3" placeholder="Ex: Equipamento inspecionado. Recomendada limpeza de temporários, otimização gamer e revisão do SSD de jogos..."></textarea>
+
+                        <div class="btn-row" style="margin-top:14px;">
+                            <button class="btn primary" id="btnSaveCrmAndReport" style="background:#10b981;color:#fff;">💾 Salvar no SQLite & Gerar Relatório Exclusivo do Cliente</button>
+                        </div>
+                    </div>
+
+                    <div class="panel-card">
+                        <h3>2. Tabela de Preços Médios Justos de Mercado (Marque para Orçar)</h3>
+                        <p class="muted" style="margin-bottom:8px;">Valores médios justos e éticos para suporte técnico profissional:</p>
+                        <div class="table-scroll" style="max-height:310px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Incluir</th><th>Serviço Técnico</th><th>Faixa Mercado</th><th>Preço Justo</th></tr>
+                                </thead>
+                                <tbody id="fairPricingTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="flex-between" style="margin-bottom:12px;">
+                        <h3>3. Clientes Cadastrados no Banco SQLite Local (Nome, Telefone, WhatsApp & Histórico)</h3>
+                        <input type="text" id="crmSearchInput" class="search-input" placeholder="Buscar cliente por nome, WhatsApp ou PC...">
+                    </div>
+                    <div class="table-scroll" style="max-height:280px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>ID</th><th>Data</th><th>Cliente</th><th>WhatsApp / Tel</th><th>Equipamento</th><th>Total Orçado</th><th>Ações</th></tr>
+                            </thead>
+                            <tbody id="crmClientsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 13 (EXCLUSIVA ADM): GERADOR DE ASSINATURAS COMERCIAIS KEYGEN -->
+            <section id="tab-admin" class="tab-panel">
+                <div class="panel-card" style="border-left:4px solid #f59e0b;margin-bottom:16px;">
+                    <h3>👑 Painel Exclusivo do Administrador Master — Adriano Barboza (+55 61 98515-8434)</h3>
+                    <p class="muted">
+                        Utilize o Gerador Criptográfico (Keygen HMAC-SHA256) abaixo para emitir Chaves de Assinatura PRO quando um cliente comprar com você pelo WhatsApp.
+                    </p>
+                </div>
+
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>🔑 Gerador Oficial de Chaves de Assinatura PRO (Keygen Comercial)</h3>
+                        <label class="field-label">Nome ou Empresa do Comprador</label>
+                        <input type="text" id="admClientName" class="full-input" placeholder="Ex: Oficina Tech Silva / Joao Gamer">
+
+                        <label class="field-label" style="margin-top:12px;">Plano de Assinatura (Validade da Chave)</label>
+                        <select id="admPlanDays" class="full-input">
+                            <option value="30">Plano Mensal — 30 Dias de Acesso PRO</option>
+                            <option value="90">Plano Trimestral — 90 Dias de Acesso PRO</option>
+                            <option value="180">Plano Semestral — 180 Dias de Acesso PRO</option>
+                            <option value="365" selected>Plano Anual — 365 Dias de Acesso PRO</option>
+                            <option value="3650">Licença Vitalícia VIP — 10 Anos (3650 Dias)</option>
+                        </select>
+
+                        <button class="btn primary" id="btnGenerateKey" style="margin-top:16px;background:#f59e0b;color:#0b1120;">🔑 Gerar Chave de Assinatura PRO</button>
+
+                        <pre id="admGeneratedKeyBox" class="terminal-box" style="margin-top:14px;min-height:110px;">Preencha o nome do cliente e clique em "Gerar Chave de Assinatura PRO"...</pre>
+                    </div>
+
+                    <div class="panel-card">
+                        <h3>⚙️ Controle do Modo Trial & Auditoria de Licenciamento Local</h3>
+                        <div class="kv-list" style="margin-bottom:16px;">
+                            <div class="kv-row"><span class="muted">Perfil Logado Agora</span><strong id="admCurrentRoleText">👑 Administrador Master</strong></div>
+                            <div class="kv-row"><span class="muted">Análises Trial Usadas nesta Máquina</span><strong id="admTrialCounterText">0 de 4</strong></div>
+                            <div class="kv-row"><span class="muted">Chave PRO Ativada nesta Máquina</span><code id="admActiveKeyText">Nenhuma</code></div>
+                            <div class="kv-row"><span class="muted">WhatsApp Oficial de Vendas</span><strong>+55 61 98515-8434</strong></div>
+                        </div>
+
+                        <button class="btn secondary" id="btnResetTrialCounter">🔄 Zerar Contador Trial desta Máquina (Voltar para 0/4)</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

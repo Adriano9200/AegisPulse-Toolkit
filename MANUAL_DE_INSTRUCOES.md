@@ -1,84 +1,85 @@
-# 📘 Manual Oficial de Instruções — AegisPulse IT Toolkit v3.0.0
+# 📘 Manual de Instruções Oficial — AegisPulse IT Toolkit v4.0.0
 
-**Diagnóstico • Automação • Inteligência**  
-*Tecnologia sob controle. Suporte com inteligência.*  
-**Autor e Proprietário:** Adriano Barboza  
-**WhatsApp Comercial (Vendas & Assinaturas PRO):** [+55 61 98515-8434](https://wa.me/5561985158434)  
-**E-mail:** `adriano9200@gmail.com`  
-**Repositório Oficial:** [https://github.com/Adriano9200/AegisPulse-Toolkit](https://github.com/Adriano9200/AegisPulse-Toolkit)
+**Identidade Oficial:**
+> **AegisPulse IT Toolkit**  
+> *Diagnóstico • Automação • Inteligência*  
+> *Tecnologia sob controle. Suporte com inteligência.*  
+> **Autor e Proprietário:** Adriano Barboza (`adriano9200@gmail.com` | **WhatsApp:** `+55 61 98515-8434`)
 
-## Parte 1 — Como Iniciar o AegisPulse IT Toolkit v3.0.0
+---
 
-1. Na pasta do projeto (`D:\PROJETOS_PESSOAL\AegisPulse-Toolkit`), dê dois cliques em **`Iniciar_AegisPulse.bat`** (ele solicitará permissão de Administrador automaticamente para ler sensores térmicos, SMART dos discos e Windows Update) ou execute no PowerShell:
-   ```powershell
-   cd "D:\PROJETOS_PESSOAL\AegisPulse-Toolkit"
-   python main.py
-   ```
-2. Caso queira gerar um **executável portátil único (`.exe`)** para divulgar em Modo Trial aos seus clientes sem que eles precisem ter Python instalado, dê dois cliques em **`build_exe.bat`**. O arquivo ficará pronto em `dist\AegisPulse_Toolkit.exe`.
+## 1. Visão Geral dos 3 Perfis de Acesso
 
-## Parte 2 — Como Funcionam os 3 Perfis de Acesso (Trial, Assinante PRO e ADM)
+1. **⏳ Modo Trial Gratuito (4 Análises + IA Local N3):**
+   - Permite realizar até **4 varreduras completas** gratuitamente, incluindo o novo módulo **💿 Discos, SMART & Recuperação** e a **🧠 IA Local AegisPulse N3**.
+   - Ao tentar usar **Google Gemini** ou **xAI Grok** (ou na 5ª análise), convida o usuário de forma intuitiva a assinar pelo seu WhatsApp **`+55 61 98515-8434`**.
+2. **⭐ Modo Assinante PRO (`AEGIS-PRO-...`):**
+   - Desbloqueado com chave gerada por você no Keygen ADM. Libera varreduras ilimitadas e os motores **Google Gemini 3.x** e **xAI Grok / Groq**, mantendo ocultas suas abas particulares de Administrador.
+3. **👑 Modo Administrador Master (Exclusivo Adriano Barboza):**
+   - **Sua Senha Master:** `Luna@19102023` (validada por hash SHA-256 `1fd12a251366b5ab823d6bc19c780f5dd04ae40b76e1bd07a91a679f2670e196`, nunca exposta em texto puro no GitHub).
+   - Desbloqueia as abas **💰 ADM: Clientes & Preços (CRM SQLite)** e **👑 ADM: Licenças & Keygen**.
 
-Ao abrir o **AegisPulse v3.0**, a janela inicial apresenta **3 modalidades claras e intuitivas**:
+---
 
-### 1. ⏳ Modo Trial Gratuito (Para Demonstração e Divulgação)
-* **Como entrar:** Basta clicar no botão azul **`🚀 Entrar no Modo Trial`** (não exige senha).
-* **O que está liberado:**
-  * Permite executar até **4 diagnósticos completos gratuitos** na máquina;
-  * Libera o uso gratuito da **🧠 IA Local AegisPulse N3** na Aba 9;
-  * Exibe um botão verde no topo (**`📲 Assinar PRO (WhatsApp)`**) que leva o usuário direto para o seu WhatsApp (`+55 61 98515-8434`).
-* **Como funciona o bloqueio comercial:**
-  * Na **5ª tentativa de análise** (ou se o usuário Trial tentar selecionar **Google Gemini** ou **xAI Grok** na Aba 9), o sistema exibe automaticamente o convite comercial com o seu WhatsApp **`+55 61 98515-8434`** para que ele compre uma Chave de Assinatura PRO!
+## 2. Como Usar o Novo Módulo: 💿 Discos, SMART & Recuperação (v4.0.0)
 
-### 2. ⭐ Modo Assinante PRO (Para Clientes e Técnicos que Comprarem sua Assinatura)
-* **Como entrar:** O cliente cola a chave que você gerou para ele (ex: `AEGIS-PRO-20271015-CLIENT-XXXXXXXXXX`) no campo da opção 2 e clica em **`Ativar Chave PRO`**.
-* **O que está liberado:**
-  * Diagnósticos, manutenções, otimizações gamer e geração de laudos PDF **ilimitados** até a data de vencimento da chave;
-  * Desbloqueia o uso dos motores de IA em nuvem (**✨ Google Gemini 3.x** e **🚀 xAI Grok / Groq Cloud**) na Aba 9;
-  * **Segurança:** As Abas 11 (`💰 ADM: Clientes & Preços`) e 12 (`👑 ADM: Licenças & Keygen`) permanecem **100% invisíveis e bloqueadas** para o assinante comum!
+Acesse a segunda aba do menu lateral (**💿 Discos, SMART & Recuperação**) para utilizar as 10 seções profissionais:
 
-### 3. 👑 Modo Administrador Master (Exclusivo Adriano Barboza)
-* **Como entrar:** Na opção 3 da tela inicial, digite a sua nova **Senha Master pessoal** (configurada via hash SHA-256 seguro) e clique em **`Entrar como ADM`**.
-* **O que está liberado:**
-  * Acesso irrestrito a todas as ferramentas e motores de IA;
-  * Desbloqueia as duas abas exclusivas de gestão do seu negócio:
-    * **Aba 11 (`💰 ADM: Clientes & Preços`):** Seu banco de dados **SQLite**, Tabela de Preços Médios Justos de Mercado (Sem Abuso) e Gerador de Relatório/Orçamento Exclusivo para enviar ao cliente.
-    * **Aba 12 (`👑 ADM: Licenças & Keygen`):** Seu gerador oficial de chaves `AEGIS-PRO-...` para vender assinaturas Mensais (30d), Trimestrais (90d), Semestrais (180d), Anuais (365d) ou Vitalícias!
+### 2.1. Inventário Avançado e Detalhes do Dispositivo
+- Clique em qualquer disco na tabela superior (ou selecione no menu suspenso) para inspecionar **HDDs, SSDs SATA, SSDs NVMe, Pendrives USB e Discos Externos**.
+- O sistema exibe a capacidade exata em **Bytes**, **Decimal (`GB`/`TB` nominal de fábrica)** e **Binário (`GiB`/`TiB` real do Windows)**, além de identificar pontes USB (`JMicron`, `ASMedia`, `Realtek`) e informar quando um adaptador USB bloqueia comandos SMART.
 
-## Parte 3 — Guia das Novas Abas da Versão 3.0.0
+### 2.2. Saúde SMART Profunda, Vida Útil (TBW / POH) e Histórico SQLite
+- **Saúde SMART:** Exibe atributos brutos (`Hex` e `Int`), normalizados (`Atual`, `Pior`, `Limiar`), gravidade e significado técnico, decodificando inclusive contadores compostos de 48 bits da Seagate e registradores NVMe (`Critical Warning`, `Available Spare`, `Percentage Used`, `Data Units Read/Written`).
+- **Vida Útil e Desgaste:** Mostra as horas acumuladas em funcionamento e o **equivalente em dias e anos**, diferenciando:
+  1. *Vida útil reportada pelo fabricante (SMART/Firmware)*,
+  2. *Desgaste estimado por TBW de referência*,
+  3. *Tendência histórica entre coletas salvas no banco `data/aegispulse_storage.db`*.
 
-### 🌡️ Medidor de Temperatura Atual de CPU e GPU (PC Gamer e Casual)
-* Visível logo no 3º card da **Aba 1 (`📊 Visão Geral & Temps`)**, na **Aba 2 (`🖥️ Hardware & Discos`)**, na **Aba 7 (`🎮 PC Gamer & DLLs`)** e nos **Laudos PDF**:
-  * Mede em tempo real a temperatura da **CPU** e da **GPU** em graus Celsius (`°C`);
-  * Classifica automaticamente o estado térmico:
-    * **`❄️ Fria / Ideal (< 65°C)`**
-    * **`🌡️ Normal em Uso (65–79°C)`**
-    * **`🔥 Alerta Térmico (≥ 80°C — Revisar Pasta Térmica/Cooler)`** (excelente argumento técnico para você recomendar a higienização interna + troca de pasta térmica!).
+### 2.3. Testes Reais de Integridade e Desempenho
+- **⚡ Verificação Rápida:** Inspeciona SMART, partições e latência inicial em segundos.
+- **🚀 Benchmark de Leitura (Sequencial/Blocos):** Mede velocidade (`MB/s`), latência média/máxima (`ms`) e `IOPS`, destacando blocos lentos (`>150ms`) sem realizar nenhuma escrita.
+- **🔍 Varredura de Superfície:** Examina blocos distribuídos em modo somente-leitura, registrando bytes examinados, áreas não testadas e erros de I/O.
+- **⚠️ Teste de Escrita:** Bloqueado por padrão! Só executa em arquivo temporário se você digitar explicitamente `CONFIRMAR_ESCRITA_RISCO_DADOS` e se o disco não tiver falha física.
 
-### 🧩 Aba 3: Compatibilidade de Hardware & Upgrades (De Acordo com Todo o Setup)
-Analisa automaticamente o conjunto da máquina do cliente e responde na tela:
-1. **Placa-Mãe & Socket da CPU:** Identifica a plataforma (ex: *Intel LGA 1151 v2*, *LGA 1200*, *LGA 1700*, *AMD AM4*, *AM5*) e lista quais processadores superiores cabem naquela mesma placa-mãe sem precisar trocá-la.
-2. **Memória RAM & Expansão:** Mostra o padrão (*DDR3, DDR4 ou DDR5*), a configuração atual e a especificação exata de pente para comprar e expandir com compatibilidade total.
-3. **Placa de Vídeo (PCIe x16) & Fonte Recomendada (PSU):** Calcula a potência de fonte recomendada em Watts (ex: `500W a 550W 80 Plus Bronze/Gold`) e indica quais placas de vídeo modernas combinam com o processador atual sem gargalo severo.
-4. **Armazenamento & Checklist Windows 11:** Confirma suporte a SSDs M.2 NVMe e SATA III e verifica se CPU, RAM e TPM 2.0 atendem aos requisitos do Windows 11 24H2/25H2.
+### 2.4. Diagnóstico Especializado de Falhas (CRC vs Setor Defeituoso, RAW e USB)
+- **Erro de Redundância Cíclica (CRC — Atributo 199):** O AegisPulse explica claramente que erros CRC ocorrem na comunicação pelo cabo SATA ou porta/ponte USB — **não significam automaticamente setor defeituoso na mídia**.
+- **Volume RAW / Partições Perdidas / Disco Não Inicializado:** Orienta a bloquear qualquer formatação ou inicialização do Windows antes de extrair imagem/dados.
+- **Pendrives e Unidades Externas USB:** Detecta proteção contra gravação (`Read-Only` lógico vs trava de hardware NAND esgotada), desconexões no Log de Eventos (`IDs 51, 129, 153, 157`) e alerta sobre pendrives genéricos com firmware adulterado (capacidade falsa).
 
-### 💰 Aba 11 (Exclusiva ADM): CRM SQLite, Tabela de Preços Justos & Relatório Exclusivo do Cliente
-Projetada para profissionalizar o seu atendimento comercial:
-1. **Tabela de Preços Médios Justos de Mercado (Sem Abuso):**
-   * Traz 9 serviços padronizados com a faixa de mercado e o **Preço Justo Sugerido** (entre R$ 80,00 e R$ 180,00).
-   * Basta marcar as caixinhas (`☑️`) dos serviços que o computador do cliente precisa.
-2. **Cadastro no Banco SQLite (`data/aegispulse_admin.db`):**
-   * Preencha o **Nome do Cliente**, o **WhatsApp (com DDD)**, telefone alternativo, desconto (se houver) e observações.
-   * Clique no botão verde **`💾 Salvar no SQLite & Gerar Relatório Exclusivo do Cliente`**.
-3. **O que acontece ao clicar:**
-   * O atendimento fica salvo permanentemente no seu banco de dados local **SQLite** (na tabela inferior você pode pesquisar qualquer cliente atendido por nome ou WhatsApp);
-   * Abre imediatamente uma nova guia com o **Laudo & Orçamento Exclusivo do Cliente** (com visual limpo em fundo claro, dados do cliente, dados e temperaturas do PC, tabela transparente dos serviços orçados e dois botões no topo: **`🖨️ Imprimir / Salvar em PDF`** e **`💬 Enviar Orçamento Direto no WhatsApp do Cliente`**!).
+### 2.5. Fluxo Seguro de Recuperação Assistida
+1. **Avaliação de Risco (`BAIXO`, `MODERADO`, `ALTO`, `CRÍTICO`):**
+   - Sempre que houver setores pendentes/realocados ou risco alto/crítico, o sistema exige **criar uma imagem `.img` antes de tentar reparar** e **bloqueia automaticamente o `CHKDSK /F` ou `/R`**, evitando que o Windows destrua dados recuperáveis tentando realocar a tabela `$MFT` em um disco morrendo.
+   - Quando há sinais severos de colapso físico (0 Bytes / No Media / erros incorrigíveis crescentes em dados críticos), recomenda encaminhamento para **Laboratório Especializado (Cleanroom / PC-3000)**.
+2. **Clonagem / Imagem Setor-a-Setor Resiliente (`.img` + Mapfile):**
+   - Informe o caminho do arquivo `.img` em **outra unidade física** (o sistema bloqueia `Origem == Destino`) e digite `CONFIRMAR_IMAGEM`.
+   - O gerador isola blocos com erro de leitura preenchendo zeros no destino e salvando o mapa em `*.mapfile.json` e `.ddrescue.map` (compatível com **GNU `ddrescue`**), permitindo cancelar e retomar exatamente de onde parou.
+3. **Recuperação de Partições (`TestDisk`) e Arquivos (`PhotoRec` / Scanner de Assinaturas):**
+   - Inspeciona cabeçalhos `MBR (0x55AA)` e `GPT (EFI PART)` e recupera arquivos exigindo que a pasta de destino fique em **outra unidade**, documentando as limitações de *File Carving* (como perda dos nomes e pastas originais quando a `$MFT` foi destruída).
 
-## Parte 4 — Como Trancar o Projeto no GitHub como Software Proprietário (Visível para Análise, Bloqueado para Uso)
+---
 
-Para que qualquer recrutador, empresa ou cliente possa **ver e admirar a arquitetura do seu projeto no GitHub**, mas **não consiga usá-lo livremente nem alterar seu código**, aplicamos **4 travas combinadas**:
+## 3. Como Executar os Testes Automatizados
 
-1. **Trava Legal (`LICENSE` Proprietária — All Rights Reserved):** O arquivo `LICENSE` deixa explícito que o código não é Open Source (não é MIT nem GPL) — pertence exclusivamente a **Adriano Barboza**, sendo proibida a cópia, redistribuição ou uso comercial sem chave de assinatura.
-2. **Trava Criptográfica no Código (`backend/auth.py`):** Sua senha Master nunca fica escrita em texto aberto no código (apenas o hash irreversível SHA-256), e o Modo Trial trava na 4ª análise exigindo uma chave `AEGIS-PRO-...` assinada com HMAC-SHA256.
-3. **Trava de Privacidade (`.gitignore`):** Seu arquivo `config.json` (com suas chaves de API Gemini/Grok), seu banco de dados SQLite de clientes (`data/aegispulse_admin.db`) e os relatórios gerados (`reports/*.html`) são bloqueados pelo `.gitignore` e nunca sobem para o GitHub.
-4. **Trava de Repositório no Site do GitHub (`Rulesets` + Desativar Forks/Issues se desejar):**
-   * Em `https://github.com/Adriano9200/AegisPulse-Toolkit/settings/rules`, mantenha a regra ativa na branch `main` com **Restrict deletions** e **Block force pushes** para blindar seu histórico.
+Para validar todos os cenários do módulo de armazenamento (discos saudáveis, RAW, erros SMART, CRC, desconexões USB, travas de segurança e retomada de imagem):
+
+```powershell
+cd "D:\PROJETOS_PESSOAL\AegisPulse-Toolkit"
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+---
+
+## 4. Como Atualizar sua Pasta Local e Subir a v4.0.0 para o GitHub
+
+Abra o **PowerShell** e execute:
+
+```powershell
+robocopy "G:\Meu Drive\AegisPulse-Toolkit" "D:\PROJETOS_PESSOAL\AegisPulse-Toolkit" /E /XD .git __pycache__ data reports logs /XF *.gdoc *.gsheet *.old *.v1_1_old *.v2.old *.v3_0_0.old config.json license.json
+cd "D:\PROJETOS_PESSOAL\AegisPulse-Toolkit"
+python -m unittest discover -s tests -p "test_*.py" -v
+git add .
+git status
+git commit -m "feat(storage): lancamento AegisPulse v4.0.0 com modulo forense de discos, SMART profundo, vida util SQLite, testes de integridade e recuperacao assistida por Adriano Barboza"
+git push
+```

@@ -3,9 +3,9 @@
 """
 ================================================================================
 PROJETO: AegisPulse IT Toolkit
-ARQUIVO: backend/server.py (Servidor HTTP/REST API v3.0 com CRM SQLite & Multi-IA)
+ARQUIVO: backend/server.py (Servidor HTTP/REST API v4.0 com Storage Forensics)
 AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-VERSÃO:  3.0.0
+VERSÃO:  4.0.0
 ================================================================================
 """
 
@@ -58,6 +58,18 @@ from backend.services.admin_crm import (
     delete_crm_client,
     save_client_and_generate_report,
 )
+from backend.services.storage_health import (
+    build_complete_storage_suite_payload,
+    list_storage_operations_log,
+)
+from backend.services.storage_diagnostics import run_storage_integrity_test
+from backend.services.storage_recovery import (
+    create_or_resume_disk_image,
+    cancel_active_clone_job,
+    inspect_and_recover_partitions,
+    recover_files_assisted,
+    execute_logical_repair,
+)
 from backend.services.gemini_ai import check_internet_connection, query_gemini_ai
 from backend.services.html_reporter import generate_html_report
 
@@ -76,6 +88,21 @@ def log_action(action_name: str, summary: str) -> None:
         "summary": summary,
     }
     SESSION_STATE["action_logs"].append(entry)
+
+
+def _find_device_in_snapshot(disk_number: int = 0, device_uid: str = "") -> dict:
+    snap = SESSION_STATE.get("last_snapshot") or {}
+    st = snap.get("storage_suite") or {}
+    devs = st.get("devices") or []
+    for d in devs:
+        if (device_uid and d.get("device_uid") == device_uid) or int(d.get("disk_number", -1)) == int(disk_number):
+            return d
+    if devs:
+        return devs[0]
+    fresh = build_complete_storage_suite_payload(SESSION_STATE["base_dir"])
+    if fresh.get("devices"):
+        return fresh["devices"][0]
+    return {"device_uid": "DISK_0", "disk_number": 0, "model": "Disco Principal", "drive_letters": ["C:"], "capacity": {"bytes": 0}}
 
 
 class AegisPulseRequestHandler(BaseHTTPRequestHandler):
@@ -171,6 +198,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             net = collect_network_diagnostics()
             gaming = audit_gaming_and_dlls(hardware=hw)
             compat = analyze_hardware_compatibility(hardware=hw, os_info=os_data)
+            storage_suite = build_complete_storage_suite_payload(base_dir=base_dir)
 
             updated_sess = get_session_info(base_dir, self._get_token())
             snapshot = {
@@ -187,15 +215,27 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 "network": net,
                 "gaming": gaming,
                 "compatibility": compat,
+                "storage_suite": storage_suite,
                 "pricing_catalog": FAIR_PRICING_CATALOG if updated_sess.get("role") == "admin" else [],
                 "action_logs": SESSION_STATE["action_logs"],
             }
             SESSION_STATE["last_snapshot"] = snapshot
             log_action(
-                f"Diagnóstico v3.0 ({updated_sess.get('role', 'user').upper()})",
-                f"Varredura executada em {hw.get('hostname')} ({msg})",
+                f"Diagnóstico Completo v4.0 ({updated_sess.get('role', 'user').upper()})",
+                f"Varredura executada em {hw.get('hostname')} ({storage_suite.get('total_physical_disks', 1)} disco(s) auditado(s) | {msg})",
             )
             self._send_json(snapshot)
+            return
+
+        if route == "/api/storage/scan":
+            if not self._require_auth():
+                return
+            importance = (qs.get("importance") or ["alta"])[0]
+            storage_suite = build_complete_storage_suite_payload(base_dir=base_dir, data_importance=importance)
+            if SESSION_STATE.get("last_snapshot"):
+                SESSION_STATE["last_snapshot"]["storage_suite"] = storage_suite
+            log_action("Auditoria Forense de Discos & SMART", f"{storage_suite.get('total_physical_disks', 0)} dispositivo(s) analisado(s).")
+            self._send_json({"success": True, "storage_suite": storage_suite, "action_logs": SESSION_STATE["action_logs"]})
             return
 
         if route == "/api/admin/crm/list":
@@ -344,6 +384,120 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
         if not sess:
             return
 
+        # ==================== ROTAS DO MÓDULO DE DISCOS, SMART & RECUPERAÇÃO (v4.0) ====================
+        if route == "/api/storage/test":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            test_type = str(body.get("test_type", "quick_health"))
+            sample_mb = int(body.get("sample_mb", 16))
+            block_kb = int(body.get("block_size_kb", 256))
+            confirm_write = str(body.get("confirm_write_risk", ""))
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = run_storage_integrity_test(
+                base_dir=base_dir,
+                device=dev,
+                test_type=test_type,
+                sample_mb=sample_mb,
+                block_size_kb=block_kb,
+                confirm_write_risk=confirm_write,
+            )
+            log_action(f"Teste de Disco ({test_type})", f"{dev.get('model')}: {res.get('message')}")
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/storage/recovery/image":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            dest_path = str(body.get("destination_path", ""))
+            confirm_token = str(body.get("confirm_token", ""))
+            max_mb = int(body.get("max_mb", 16))
+            resume_flag = bool(body.get("resume", True))
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = create_or_resume_disk_image(
+                base_dir=base_dir,
+                source_device=dev,
+                destination_image_path=dest_path,
+                confirm_token=confirm_token,
+                max_bytes_limit=max_mb * 1024 * 1024,
+                resume=resume_flag,
+            )
+            log_action("Clonagem / Imagem de Disco", res.get("message", ""))
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/storage/recovery/cancel":
+            dev_uid = str(body.get("device_uid", ""))
+            res = cancel_active_clone_job(dev_uid)
+            log_action("Cancelamento Seguro de Imagem", res.get("message", ""))
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/storage/recovery/partitions":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            img_override = str(body.get("image_path", "")).strip() or None
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = inspect_and_recover_partitions(
+                base_dir=base_dir,
+                device=dev,
+                image_or_target_override=img_override,
+            )
+            log_action("Recuperação / Inspeção de Partições", res.get("message", ""))
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/storage/recovery/files":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            dest_folder = str(body.get("destination_folder", ""))
+            src_override = str(body.get("source_image_path", "")).strip() or None
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = recover_files_assisted(
+                base_dir=base_dir,
+                source_device=dev,
+                destination_folder=dest_folder,
+                source_override_path=src_override,
+            )
+            log_action("Recuperação Assistida de Arquivos", res.get("message", ""))
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/storage/recovery/logical-repair":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            drive_letter = str(body.get("drive_letter", "C:"))
+            mode = str(body.get("mode", "diagnose_only"))
+            confirm_rep = str(body.get("confirm_repair", ""))
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = execute_logical_repair(
+                base_dir=base_dir,
+                device=dev,
+                drive_letter=drive_letter,
+                mode=mode,
+                confirm_repair=confirm_rep,
+            )
+            log_action(f"Reparação Lógica ({mode})", res.get("message", ""))
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        # ==================== DEMAIS ROTAS EXISTENTES ====================
         if route == "/api/software/winget":
             action = str(body.get("action", ""))
             pkg_id = str(body.get("package_id", ""))
@@ -428,6 +582,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                     "drivers_bios": collect_drivers_and_bios(),
                     "software": collect_installed_software(),
                     "gaming": audit_gaming_and_dlls(hardware=hw),
+                    "storage_suite": build_complete_storage_suite_payload(base_dir=base_dir),
                 }
 
             res = query_gemini_ai(
@@ -457,6 +612,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                     "software": collect_installed_software(),
                     "gaming": audit_gaming_and_dlls(hardware=hw),
                     "compatibility": analyze_hardware_compatibility(hw, os_d),
+                    "storage_suite": build_complete_storage_suite_payload(base_dir=base_dir),
                 }
                 SESSION_STATE["last_snapshot"] = snapshot
 
@@ -466,7 +622,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 ai_analysis=SESSION_STATE.get("last_ai_analysis", ""),
                 action_logs=SESSION_STATE["action_logs"],
             )
-            log_action("Exportação de Laudo HTML", f"Arquivo gerado: {res.get('filename')}")
+            log_action("Exportação de Laudo HTML v4.0", f"Arquivo gerado: {res.get('filename')}")
             res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return

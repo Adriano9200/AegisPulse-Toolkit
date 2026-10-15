@@ -1,17 +1,17 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-PROJETO: AegisPulse IT Toolkit — Diagnostic, Maintenance & AI Suite
+PROJETO: AegisPulse IT Toolkit — Diagnostic, Maintenance, Storage Forensics & AI
 ARQUIVO: frontend/index.html
 AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilidade)
+VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Multi-IA)
 ================================================================================
 -->
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AegisPulse IT Toolkit v3.0 — Por Adriano Barboza</title>
+    <title>AegisPulse IT Toolkit v4.0 — Por Adriano Barboza</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -21,7 +21,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
             <div style="text-align:center;margin-bottom:14px;">
                 <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
                 <div class="modal-badge" style="margin-top:6px;">DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</div>
-                <h2 style="margin-top:4px;">AegisPulse IT Toolkit v3.0</h2>
+                <h2 style="margin-top:4px;">AegisPulse IT Toolkit v4.0</h2>
                 <p class="modal-sub"><strong>Tecnologia sob controle. Suporte com inteligência.</strong><br>Desenvolvido por Adriano Barboza • WhatsApp: <strong>+55 61 98515-8434</strong></p>
             </div>
 
@@ -75,7 +75,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                     </div>
                     <div>
                         <h1 style="line-height:1.1;">AegisPulse</h1>
-                        <span style="color:#38bdf8;font-weight:700;letter-spacing:1px;font-size:10.5px;">IT TOOLKIT v3.0</span>
+                        <span style="color:#38bdf8;font-weight:700;letter-spacing:1px;font-size:10.5px;">IT TOOLKIT v4.0</span>
                     </div>
                 </div>
                 <div style="font-size:11px;color:#e2e8f0;font-weight:600;margin-top:2px;">Diagnóstico • Automação • Inteligência</div>
@@ -86,8 +86,11 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 <button class="nav-item active" data-tab="tab-dashboard">
                     <span>📊</span> Visão Geral & Temps
                 </button>
+                <button class="nav-item" data-tab="tab-storage" style="border-left:3px solid #38bdf8;">
+                    <span>💿</span> Discos, SMART & Recuperação
+                </button>
                 <button class="nav-item" data-tab="tab-hardware">
-                    <span>🖥️</span> Hardware & Discos
+                    <span>🖥️</span> Hardware & Memória
                 </button>
                 <button class="nav-item" data-tab="tab-compatibility">
                     <span>🧩</span> Compatibilidade & Setup
@@ -136,7 +139,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
             <header class="topbar">
                 <div>
                     <h2 id="machineTitle">Carregando diagnóstico do equipamento...</h2>
-                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse v3.0 inspeciona o sistema</p>
+                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse v4.0 inspeciona o sistema e os discos</p>
                 </div>
                 <div class="topbar-actions">
                     <span id="licenseBadge" class="status-pill" style="border-color:#38bdf8;color:#38bdf8;">Verificando Licença...</span>
@@ -169,7 +172,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                         <small id="kpiTempStatus" class="muted">Status Térmico: —</small>
                     </div>
                     <div class="kpi-card">
-                        <span class="kpi-label">SAÚDE DE DRIVERS, APPS & DLLS</span>
+                        <span class="kpi-label">SAÚDE DE DISCOS, DRIVERS & APPS</span>
                         <strong id="kpiAlerts">—</strong>
                         <small id="kpiBiosStatus" class="muted">BIOS: —</small>
                     </div>
@@ -187,7 +190,236 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 2: HARDWARE, TEMPERATURAS & DISCOS -->
+            <!-- ABA NOVA COMPLETA v4.0: DISCOS, SMART, VIDA ÚTIL, TESTES & RECUPERAÇÃO ASSISTIDA (10 SEÇÕES) -->
+            <section id="tab-storage" class="tab-panel">
+                <!-- CABEÇALHO E SELETOR DE DISCO ATIVO -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #38bdf8;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>💿 Central Profissional de Diagnóstico, Saúde SMART, Vida Útil & Recuperação de Armazenamento (v4.0)</h3>
+                            <p class="muted">Suporte a HDDs Mecânicos, SSDs SATA, SSDs NVMe, Pendrives USB e Unidades Externas — Com proteção não-destrutiva e persistência SQLite.</p>
+                        </div>
+                        <div class="btn-row">
+                            <select id="storageDeviceSelect" class="full-input" style="min-width:290px;"></select>
+                            <select id="storageImportanceSelect" class="full-input" style="width:190px;" title="Importância dos Dados">
+                                <option value="alta" selected>Dados: Alta Importância</option>
+                                <option value="critica_missao">Dados: Missão Crítica</option>
+                                <option value="media">Dados: Importância Moderada</option>
+                                <option value="baixa">Dados: Substituíveis</option>
+                            </select>
+                            <button class="btn primary" id="btnRefreshStorage">🔄 Re-escanear Discos & SMART</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. INVENTÁRIO AVANÇADO DE DISPOSITIVOS DE ARMAZENAMENTO -->
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <h3>1. Inventário Avançado de Dispositivos de Armazenamento (Bytes, GB/TB Decimal vs GiB/TiB Binário)</h3>
+                    <div class="table-scroll">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Disco #</th>
+                                    <th>Marca / Modelo</th>
+                                    <th>Série / Firmware</th>
+                                    <th>Mídia / Interface / Protocolo</th>
+                                    <th>Capacidade (Decimal vs Binária)</th>
+                                    <th>Estilo / Unidades</th>
+                                    <th>Estado / Risco</th>
+                                </tr>
+                            </thead>
+                            <tbody id="storageInventoryTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 2. DETALHES DO DISPOSITIVO & CLASSIFICAÇÃO DE RISCO E SEGURANÇA -->
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>2. Detalhes Técnicos do Dispositivo & Controlador</h3>
+                        <div id="storageDeviceDetailsBox" class="kv-list"></div>
+                        <div id="storageAdapterLimitsBox" style="margin-top:10px;"></div>
+                    </div>
+                    <div class="panel-card" id="storageRiskCard" style="border-left:4px solid #10b981;">
+                        <h3>8. Classificação de Risco, Segurança & Plano de Ação Ordenado</h3>
+                        <div id="storageRiskSummaryBox" class="kv-list"></div>
+                        <div style="margin-top:10px;">
+                            <strong style="color:#38bdf8;font-size:13px;">Plano de Ação Ordenado por Menor Risco aos Dados:</strong>
+                            <ul id="storageOrderedPlanList" style="padding-left:18px;margin-top:6px;font-size:13px;line-height:1.55;"></ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. SAÚDE SMART PROFUNDA & 4. ESTIMATIVA DE VIDA ÚTIL E DESGASTE -->
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>4. Estimativa de Vida Útil, TBW, Horas Ligadas (POH) & Desgaste</h3>
+                        <div id="storageLifespanBox" class="kv-list"></div>
+                        <div id="storageForecastDisclaimer" class="maint-card" style="margin-top:10px;font-size:12.5px;border-color:rgba(56,189,248,0.35);"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>5. Monitoramento Histórico Persistente (SQLite) & Tendências</h3>
+                        <div id="storageDegradationAlertsBox" style="margin-bottom:8px;"></div>
+                        <div id="storageHistoryChartBox" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;min-height:125px;"></div>
+                        <div class="table-scroll" style="max-height:150px;margin-top:8px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Data Coleta</th><th>Temp</th><th>POH (h)</th><th>Gravações</th><th>Desgaste</th><th>Realoc./Pend.</th><th>Score</th></tr>
+                                </thead>
+                                <tbody id="storageHistoryTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TABELA PROFUNDA DE ATRIBUTOS SMART (HDD / SATA SSD / NVMe) -->
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>3. Diagnóstico SMART Profundo — Atributos Brutos, Normalizados, Limiares & Significado Técnico</h3>
+                            <p class="muted">Distingue atributos de HDDs, SSDs SATA e SSDs NVMe sem inventar métricas ocultas pela controladora.</p>
+                        </div>
+                        <span id="smartSupportBadge" class="badge ok">SMART Ativo</span>
+                    </div>
+                    <div class="table-scroll" style="max-height:320px;margin-top:10px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Atributo SMART / NVMe</th>
+                                    <th>Atual / Pior / Limiar</th>
+                                    <th>Valor Bruto (Hex / Int)</th>
+                                    <th>Valor Interpretado</th>
+                                    <th>Gravidade</th>
+                                    <th>Significado Técnico & Notas do Fabricante</th>
+                                </tr>
+                            </thead>
+                            <tbody id="storageSmartTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 6. TESTES DE INTEGRIDADE E DESEMPENHO -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #10b981;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>6. Testes Reais e Controlados de Integridade, Throughput (MB/s), Latência (ms) & Superfície</h3>
+                            <p class="muted">Por padrão, todos os testes são 100% somente-leitura (não-destrutivos). O teste de escrita exige confirmação explícita.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn primary" onclick="runStorageTest('quick_health')">⚡ Verificação Rápida</button>
+                            <button class="btn secondary" onclick="runStorageTest('read_benchmark')">🚀 Benchmark de Leitura (Sequencial/Blocos)</button>
+                            <button class="btn secondary" onclick="runStorageTest('surface_scan')">🔍 Varredura de Superfície</button>
+                            <button class="btn secondary" onclick="runStorageTest('smart_short')">🩺 Autoteste SMART Curto</button>
+                            <button class="btn secondary" onclick="runStorageTest('smart_extended')">🛡️ Autoteste SMART Estendido</button>
+                            <button class="btn danger" onclick="runStorageWriteTestPrompt()">⚠️ Teste de Escrita (Confirmar)</button>
+                        </div>
+                    </div>
+                    <div id="storageTestProgressBox" class="maint-card" style="margin-top:12px;">
+                        Selecione um dos testes acima para medir velocidade (MB/s), tempo de resposta (ms), IOPS, blocos lentos (&gt;150ms) e erros de leitura...
+                    </div>
+                </div>
+
+                <!-- 7. DIAGNÓSTICO ESPECIALIZADO DE ERROS & 8. PARTIÇÕES E SISTEMAS DE ARQUIVOS -->
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>7. Diagnóstico Especializado de Falhas (CRC, RAW, Eventos, USB & Pendrives)</h3>
+                        <p class="muted" style="margin-bottom:8px;">Diferencia falhas físicas, problemas de cabo/conexão (CRC), corrupção lógica e limitações do SO:</p>
+                        <div id="storageFaultsListBox"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>8. Partições, Volumes Lógicos & Sistemas de Arquivos (GPT / MBR / RAW)</h3>
+                        <div class="table-scroll" style="max-height:290px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Partição / Letra</th><th>Rótulo</th><th>Sistema Arq.</th><th>Capacidade (GB / GiB)</th><th>Livre (GiB)</th><th>Ocupação / Status</th></tr>
+                                </thead>
+                                <tbody id="storagePartitionsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 9. RECUPERAÇÃO ASSISTIDA E PRESERVAÇÃO DE DADOS -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #f59e0b;">
+                    <h3>9. Recuperação Assistida e Preservação de Dados (Imagem/Clonagem com Mapfile, Partições, Arquivos & CHKDSK Seguro)</h3>
+                    <p class="muted" style="margin-bottom:12px;">
+                        Fluxo profissional que avalia os riscos antes de tocar no dispositivo, bloqueia Origem == Destino e impede reparos destrutivos automáticos em discos com falha física.
+                    </p>
+
+                    <div class="two-col" style="margin-bottom:14px;">
+                        <!-- 9A. CLONAGEM E CRIAÇÃO DE IMAGEM SETOR-A-SETOR COM MAPFILE E RETOMADA -->
+                        <div class="maint-card">
+                            <h4 style="color:#38bdf8;">📀 A. Clonagem / Criação de Imagem Resiliente (.img + Mapfile / GNU ddrescue)</h4>
+                            <p class="muted" style="margin-bottom:8px;">Cria ou retoma uma imagem binária isolando blocos defeituosos em Mapfile sem travar a leitura.</p>
+                            <label class="field-label">Arquivo de Imagem de Destino (Deve estar em OUTRA unidade física)</label>
+                            <input type="text" id="recImageDestInput" class="full-input" placeholder="Ex: D:\Recuperacao_AegisPulse\disco_cliente.img">
+                            <div class="two-col" style="margin-top:8px;">
+                                <div>
+                                    <label class="field-label">Amostra / Limite (MB)</label>
+                                    <input type="number" id="recImageMaxMbInput" class="full-input" value="16" min="1" max="1048576">
+                                </div>
+                                <div>
+                                    <label class="field-label">Confirmação Obrigatória</label>
+                                    <input type="text" id="recImageConfirmInput" class="full-input" placeholder="Digite: CONFIRMAR_IMAGEM">
+                                </div>
+                            </div>
+                            <div class="btn-row" style="margin-top:10px;">
+                                <button class="btn primary" id="btnStartResumeImage">▶️ Iniciar / Retomar Imagem (.img)</button>
+                                <button class="btn danger" id="btnCancelImage">⏹️ Cancelar com Segurança (Salvar Mapfile)</button>
+                            </div>
+                        </div>
+
+                        <!-- 9B. RECUPERAÇÃO DE PARTIÇÕES (TESTDISK) E ARQUIVOS (PHOTOREC / CARVING) -->
+                        <div class="maint-card">
+                            <h4 style="color:#10b981;">📂 B. Recuperação de Partições (TestDisk) & Extração de Arquivos (PhotoRec)</h4>
+                            <p class="muted" style="margin-bottom:8px;">Inspeciona assinaturas MBR/GPT perdidas e recupera arquivos para outra unidade segura.</p>
+                            <label class="field-label">Pasta de Destino para Arquivos Recuperados (Em OUTRA unidade)</label>
+                            <input type="text" id="recFilesDestInput" class="full-input" placeholder="Ex: D:\Arquivos_Recuperados_Cliente">
+                            <label class="field-label" style="margin-top:8px;">Opcional: Analisar a partir do Arquivo de Imagem (.img) criado</label>
+                            <input type="text" id="recSourceImageInput" class="full-input" placeholder="Deixe em branco para inspecionar o disco selecionado ou cole o caminho do .img">
+                            <div class="btn-row" style="margin-top:10px;">
+                                <button class="btn secondary" id="btnInspectPartitions">🧩 Diagnosticar Partições (MBR/GPT & TestDisk)</button>
+                                <button class="btn primary" id="btnRecoverFiles" style="background:#10b981;color:#fff;">🔍 Recuperar Arquivos (PhotoRec / Assinaturas)</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 9C. REPARAÇÃO LÓGICA CONTROLADA (SEPARAÇÃO ENTRE DIAGNÓSTICO, VERIFICAÇÃO E REPARO) -->
+                    <div class="maint-card">
+                        <div class="flex-between">
+                            <div>
+                                <h4 style="color:#f59e0b;">🛠️ C. Reparação Lógica Controlada Windows (CHKDSK / Repair-Volume)</h4>
+                                <p class="muted">Separa Diagnóstico Passivo, Verificação Somente-Leitura e Reparação Ativa (bloqueada automaticamente se houver falha física SMART).</p>
+                            </div>
+                            <div class="btn-row">
+                                <input type="text" id="recLogicalDriveInput" class="search-input" style="width:90px;" value="C:" placeholder="Ex: E:">
+                                <input type="text" id="recLogicalConfirmInput" class="search-input" style="width:230px;" placeholder="Para reparo: CONFIRMAR_REPARO_LOGICO">
+                                <button class="btn secondary" onclick="runLogicalRepairMode('diagnose_only')">1. Diagnóstico Passivo</button>
+                                <button class="btn secondary" onclick="runLogicalRepairMode('verify_readonly')">2. Verificar (Somente-Leitura)</button>
+                                <button class="btn danger" onclick="runLogicalRepairMode('repair_active')">3. Executar Reparo Lógico</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <pre id="storageRecoveryOutputBox" class="terminal-box" style="margin-top:12px;min-height:140px;">Aguardando operação de recuperação assistida, criação de imagem ou inspeção de partições...</pre>
+                </div>
+
+                <!-- 10. LOGS E HISTÓRICO DE OPERAÇÕES DE ARMAZENAMENTO -->
+                <div class="panel-card">
+                    <h3>10. Logs e Histórico Persistente de Operações de Armazenamento (SQLite)</h3>
+                    <div class="table-scroll" style="max-height:240px;margin-top:8px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Data/Hora</th><th>Dispositivo</th><th>Operação</th><th>Risco</th><th>Status</th><th>Resumo Técnico</th></tr>
+                            </thead>
+                            <tbody id="storageOpsLogTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA 3: HARDWARE, TEMPERATURAS & MEMÓRIA -->
             <section id="tab-hardware" class="tab-panel">
                 <div class="two-col">
                     <div class="panel-card">
@@ -206,7 +438,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
 
                 <div class="panel-card" style="margin-top:16px;">
-                    <h3>Unidades Físicas (SMART) e Partições Lógicas</h3>
+                    <h3>Resumo de Unidades Físicas e Partições Lógicas</h3>
                     <table class="data-table">
                         <thead>
                             <tr><th>Unidade / Modelo</th><th>Tipo / Interface</th><th>Capacidade</th><th>Livre</th><th>Uso / Saúde SMART</th></tr>
@@ -216,7 +448,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 3 (NOVA): COMPATIBILIDADE DE HARDWARE & UPGRADES DO SETUP -->
+            <!-- ABA 4: COMPATIBILIDADE DE HARDWARE & UPGRADES DO SETUP -->
             <section id="tab-compatibility" class="tab-panel">
                 <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #38bdf8;">
                     <h3>🧩 Matriz Completa de Compatibilidade de Hardware & Upgrades (De Acordo com Todo o Setup)</h3>
@@ -246,7 +478,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 4: DRIVERS & BIOS -->
+            <!-- ABA 5: DRIVERS & BIOS -->
             <section id="tab-drivers" class="tab-panel">
                 <div class="panel-card" style="margin-bottom:16px;">
                     <div class="flex-between">
@@ -280,7 +512,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 5: SOFTWARES, DESINSTALADOR & DEBLOAT -->
+            <!-- ABA 6: SOFTWARES, DESINSTALADOR & DEBLOAT -->
             <section id="tab-software" class="tab-panel">
                 <div class="panel-card" style="margin-bottom:16px;">
                     <div class="flex-between">
@@ -335,7 +567,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 6: REDE & INTERNET -->
+            <!-- ABA 7: REDE & INTERNET -->
             <section id="tab-network" class="tab-panel">
                 <div class="two-col" style="margin-bottom:16px;">
                     <div class="panel-card">
@@ -406,7 +638,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 7: PC GAMER, TEMPERATURAS, RUNTIMES & DLLS -->
+            <!-- ABA 8: PC GAMER, TEMPERATURAS, RUNTIMES & DLLS -->
             <section id="tab-gaming" class="tab-panel">
                 <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #10b981;">
                     <div class="flex-between">
@@ -474,7 +706,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 8: MANUTENÇÃO & REPARO -->
+            <!-- ABA 9: MANUTENÇÃO & REPARO -->
             <section id="tab-maintenance" class="tab-panel">
                 <div class="panel-card">
                     <h3>Execução de Rotinas Seguras de Manutenção e Reparo</h3>
@@ -508,23 +740,23 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 9: IA LOCAL (TRIAL & PRO), GEMINI & GROK (ASSINANTES PRO) -->
+            <!-- ABA 10: IA LOCAL (TRIAL & PRO), GEMINI & GROK (ASSINANTES PRO) -->
             <section id="tab-gemini" class="tab-panel">
                 <div class="two-col">
                     <div class="panel-card">
                         <h3>Central de Inteligência Artificial — IA Local N3, Google Gemini & xAI Grok</h3>
                         <p class="muted" style="margin-bottom:10px;">
-                            A <strong>🧠 IA Local N3</strong> é liberada para todos (inclusive Modo Trial). Os motores em nuvem <strong>✨ Google Gemini</strong> e <strong>🚀 xAI Grok / Groq</strong> são exclusivos para Assinantes PRO e ADM.
+                            A <strong>🧠 IA Local N3</strong> é liberada para todos (inclusive Modo Trial) e agora analisa profundamente a telemetria SMART, TBW e riscos de todos os discos! Os motores em nuvem <strong>✨ Google Gemini</strong> e <strong>🚀 xAI Grok / Groq</strong> são exclusivos para Assinantes PRO e ADM.
                         </p>
 
                         <label class="field-label">Escolha o Motor de Inteligência Artificial</label>
                         <select id="aiProviderSelect" class="full-input" style="margin-bottom:10px;">
-                            <option value="local">🧠 IA Local AegisPulse N3 (Instantânea & Gratuita — Liberada para Trial e PRO)</option>
+                            <option value="local">🧠 IA Local AegisPulse N3 v4.0 (Instantânea & Gratuita — Liberada para Trial e PRO)</option>
                             <option value="gemini">✨ Google Gemini 3.x Cloud AI (Exclusivo Assinante PRO & ADM)</option>
                             <option value="grok">🚀 xAI Grok / Groq Cloud AI (Exclusivo Assinante PRO & ADM)</option>
                         </select>
 
-                        <textarea id="geminiPromptInput" rows="3" placeholder="Opcional: faça uma pergunta específica sobre este computador (ou deixe em branco para gerar o Diagnóstico Completo + Parecer para o Cliente)..."></textarea>
+                        <textarea id="geminiPromptInput" rows="3" placeholder="Opcional: faça uma pergunta específica sobre os discos, SMART, recuperação ou hardware (ou deixe em branco para gerar o Diagnóstico Forense Completo + Parecer para o Cliente)..."></textarea>
                         <div class="btn-row" style="margin-top:10px;">
                             <button class="btn primary" id="btnAskGemini">✨ Gerar Diagnóstico com IA Selecionada</button>
                             <a href="https://wa.me/5561985158434?text=Ol%C3%A1%20Adriano%20Barboza!%20Quero%20assinar%20o%20AegisPulse%20PRO%20para%20liberar%20o%20Gemini%20e%20Grok!" target="_blank" class="btn secondary" style="border:1px solid #10b981;color:#34d399;">📲 Assinar PRO no WhatsApp (+55 61 98515-8434)</a>
@@ -551,13 +783,13 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 10: RELATÓRIOS & LOGS HTML -->
+            <!-- ABA 11: RELATÓRIOS & LOGS HTML -->
             <section id="tab-logs" class="tab-panel">
                 <div class="panel-card">
                     <div class="flex-between">
                         <div>
-                            <h3>Logs de Auditoria da Sessão & Exportação de Laudo HTML / PDF Executivo</h3>
-                            <p class="muted">Inclui Temperaturas de CPU/GPU, Matriz de Compatibilidade, Seção PC Gamer e Parecer da IA.</p>
+                            <h3>Logs de Auditoria da Sessão & Exportação de Laudo HTML / PDF Executivo v4.0</h3>
+                            <p class="muted">Inclui Dossiê Forense de Discos & SMART, Temperaturas de CPU/GPU, Matriz de Compatibilidade, Seção PC Gamer e Parecer da IA.</p>
                         </div>
                         <button class="btn primary" onclick="exportHtmlReport()">📄 Gerar e Abrir Relatório HTML / PDF Agora</button>
                     </div>
@@ -570,7 +802,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 11 (EXCLUSIVA ADM): CRM SQLITE DE CLIENTES, PREÇOS JUSTOS & RELATÓRIO EXCLUSIVO PARA ENVIAR AO CLIENTE -->
+            <!-- ABA 12 (EXCLUSIVA ADM): CRM SQLITE DE CLIENTES, PREÇOS JUSTOS & RELATÓRIO EXCLUSIVO PARA ENVIAR AO CLIENTE -->
             <section id="tab-crm" class="tab-panel">
                 <div class="panel-card" style="border-left:4px solid #10b981;margin-bottom:16px;">
                     <h3>💰 Painel Comercial ADM — Tabela de Preços Justos (Sem Abuso), CRM SQLite & Relatório Exclusivo do Cliente</h3>
@@ -580,7 +812,6 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
 
                 <div class="two-col" style="margin-bottom:16px;">
-                    <!-- CADASTRO DO CLIENTE E EMISSÃO DO LAUDO/ORÇAMENTO -->
                     <div class="panel-card">
                         <h3>1. Dados do Cliente & Emissão de Relatório Exclusivo</h3>
                         <label class="field-label">Nome Completo / Empresa do Cliente *</label>
@@ -616,7 +847,6 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                         </div>
                     </div>
 
-                    <!-- TABELA DE PREÇOS MÉDIOS JUSTOS DE MERCADO (SEM ABUSO) -->
                     <div class="panel-card">
                         <h3>2. Tabela de Preços Médios Justos de Mercado (Marque para Orçar)</h3>
                         <p class="muted" style="margin-bottom:8px;">Valores médios justos e éticos para suporte técnico profissional:</p>
@@ -631,7 +861,6 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                     </div>
                 </div>
 
-                <!-- BANCO DE DADOS SQLITE DE CLIENTES ATENDIDOS -->
                 <div class="panel-card">
                     <div class="flex-between" style="margin-bottom:12px;">
                         <h3>3. Clientes Cadastrados no Banco SQLite Local (Nome, Telefone, WhatsApp & Histórico)</h3>
@@ -648,7 +877,7 @@ VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilida
                 </div>
             </section>
 
-            <!-- ABA 12 (EXCLUSIVA ADM): GERADOR DE ASSINATURAS COMERCIAIS KEYGEN -->
+            <!-- ABA 13 (EXCLUSIVA ADM): GERADOR DE ASSINATURAS COMERCIAIS KEYGEN -->
             <section id="tab-admin" class="tab-panel">
                 <div class="panel-card" style="border-left:4px solid #f59e0b;margin-bottom:16px;">
                     <h3>👑 Painel Exclusivo do Administrador Master — Adriano Barboza (+55 61 98515-8434)</h3>

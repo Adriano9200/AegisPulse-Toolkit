@@ -1,12 +1,16 @@
 {
   "author": "Adriano Barboza",
+  "author_whatsapp": "+55 61 98515-8434",
   "app_name": "AegisPulse IT Toolkit",
-  "version": "1.0.0",
+  "version": "3.0.1",
   "server_host": "127.0.0.1",
   "server_port": 8765,
   "require_operator_pin": true,
-  "operator_pin_sha256": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
-  "operator_pin_hint": "Padrão inicial: admin123 (Altere nas configurações ou gere um novo hash SHA-256)",
+  "operator_pin_sha256": "1fd12a251366b5ab823d6bc19c780f5dd04ae40b76e1bd07a91a679f2670e196",
+  "trial_limit": 4,
+  "trial_scans_used": 0,
+  "activated_license_key": "",
   "gemini_api_key": "COLE_SUA_GEMINI_API_KEY_AQUI",
-  "gemini_model": "gemini-2.5-flash"
+  "grok_api_key": "COLE_SUA_GROK_OU_GROQ_API_KEY_AQUI",
+  "gemini_model": "gemini-3.5-flash-lite"
 }

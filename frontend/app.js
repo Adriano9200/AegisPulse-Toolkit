@@ -3,12 +3,13 @@
 PROJETO: AegisPulse IT Toolkit — Frontend Controller
 ARQUIVO: frontend/app.js
 AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-VERSÃO:  3.0.0 (Enterprise Commercial, CRM SQLite, Temperaturas & Compatibilidade)
+VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Multi-IA)
 ================================================================================
 */
 
 let OPERATOR_TOKEN = localStorage.getItem("aegispulse_token") || "";
 let CURRENT_SNAPSHOT = null;
+let SELECTED_STORAGE_INDEX = 0;
 
 function showToast(msg) {
     const t = document.getElementById("statusToast");
@@ -20,6 +21,9 @@ function showToast(msg) {
 function syncActionLogs(res) {
     if (res && Array.isArray(res.action_logs)) {
         renderLogsTable(res.action_logs);
+    }
+    if (res && Array.isArray(res.operations_log)) {
+        renderStorageOpsLog(res.operations_log);
     }
 }
 
@@ -206,7 +210,7 @@ document.getElementById("btnResetTrialCounter").addEventListener("click", async 
     }
 });
 
-// Funções CRM SQLite & Preços Justos (Aba 11 ADM)
+// Funções CRM SQLite & Preços Justos (Aba ADM)
 async function loadAdminCrmData(query = "") {
     try {
         const res = await apiFetch(`/api/admin/crm/list?q=${encodeURIComponent(query)}`);
@@ -314,12 +318,12 @@ document.getElementById("crmSearchInput").addEventListener("input", (e) => {
 });
 
 async function runFullDiagnostic() {
-    showToast("🔍 Executando varredura completa v3.0 (Hardware, Temperaturas CPU/GPU, Compatibilidade, BIOS, Drivers, Softwares, Rede, PC Gamer & DLLs)...");
+    showToast("🔍 Executando varredura completa v4.0 (Hardware, Discos/SMART/TBW, Temperaturas CPU/GPU, Compatibilidade, BIOS, Drivers, Softwares, Rede & PC Gamer)...");
     try {
         const data = await apiFetch("/api/scan/full");
         CURRENT_SNAPSHOT = data;
         renderDashboard(data);
-        showToast("✅ Diagnóstico v3.0 concluído com sucesso!");
+        showToast("✅ Diagnóstico Forense v4.0 concluído com sucesso!");
     } catch (err) {
         console.warn("Sessão aguardando autenticação ou limite Trial atingido:", err);
     }
@@ -335,6 +339,7 @@ function renderDashboard(data) {
     const net = data.network || {};
     const gaming = data.gaming || {};
     const compat = data.compatibility || {};
+    const storageSuite = data.storage_suite || {};
 
     document.getElementById("machineTitle").textContent = `${hw.manufacturer || "PC"} — ${hw.model || "Workstation"}`;
     document.getElementById("machineSubtitle").textContent = `Hostname: ${hw.hostname} | Coletado em: ${data.collected_at} | Autor: Adriano Barboza (+55 61 98515-8434)`;
@@ -357,7 +362,8 @@ function renderDashboard(data) {
     document.getElementById("kpiTemps").textContent = `CPU: ${temps.cpu_temp_c || 45}°C | GPU: ${temps.gpu_temp_c || 42}°C`;
     document.getElementById("kpiTempStatus").textContent = temps.cpu_temp_status || "❄️ Temperatura Ideal";
 
-    document.getElementById("kpiAlerts").textContent = `${sw.outdated_count || 0} Apps Obsoletos | ${sw.bloatware_count || 0} Bloatwares | ${gaming.missing_dlls_count || 0} DLLs Ausentes`;
+    const stRisk = storageSuite.highest_risk_level || "BAIXO";
+    document.getElementById("kpiAlerts").textContent = `Risco Discos: ${stRisk} | ${sw.outdated_count || 0} Apps | ${gaming.missing_dlls_count || 0} DLLs`;
     document.getElementById("kpiBiosStatus").textContent = `BIOS ${bios.smbios_version} (${bios.status_label})`;
 
     const firstCpu = (hw.cpus && hw.cpus[0]) ? hw.cpus[0].name : "Processador N/D";
@@ -377,10 +383,13 @@ function renderDashboard(data) {
     document.getElementById("securityDetailsList").innerHTML = `
         <div class="kv-row"><span class="muted">Temperatura Atual CPU</span><span class="badge ${temps.cpu_temp_c >= 80 ? 'err' : 'ok'}">${temps.cpu_temp_c || 45}°C — ${temps.cpu_temp_status || 'OK'}</span></div>
         <div class="kv-row"><span class="muted">Temperatura Atual GPU</span><span class="badge ${temps.gpu_temp_c >= 80 ? 'err' : 'ok'}">${temps.gpu_temp_c || 42}°C — ${temps.gpu_temp_status || 'OK'}</span></div>
+        <div class="kv-row"><span class="muted">Risco Global de Discos (SMART)</span><span class="badge ${stRisk === 'ALTO' || stRisk === 'CRÍTICO' ? 'err' : (stRisk === 'MODERADO' ? 'warn' : 'ok')}">${stRisk} (${storageSuite.total_physical_disks || 1} disco(s))</span></div>
         <div class="kv-row"><span class="muted">Antivírus & Tempo Real</span><span class="badge ${sec.antivirus_enabled ? 'ok' : 'err'}">${sec.antivirus_enabled ? 'Ativo & Protegido' : 'Desativado'}</span></div>
         <div class="kv-row"><span class="muted">Chip TPM 2.0</span><span class="badge ${sec.tpm_present ? 'ok' : 'warn'}">${sec.tpm_present ? 'Presente / Pronto' : 'Não Detectado'}</span></div>
-        <div class="kv-row"><span class="muted">Domínio / Grupo de Trabalho</span><span>${hw.domain_workgroup}</span></div>
     `;
+
+    // Aba Discos, SMART & Recuperação (v4.0)
+    renderStorageSuiteTab(storageSuite);
 
     // Aba Hardware
     const mb = hw.motherboard || {};
@@ -414,7 +423,7 @@ function renderDashboard(data) {
         <tr>
             <td><strong>🖴 ${d.model}</strong> (Físico)</td>
             <td>${d.media_type} (${d.interface})</td>
-            <td>${d.size_gb} GB</td>
+            <td>${d.size_gb} GiB</td>
             <td>—</td>
             <td><span class="badge ${d.health_status === 'Healthy' || d.health_status === 'OK' ? 'ok' : 'warn'}">SMART: ${d.health_status}</span></td>
         </tr>
@@ -423,17 +432,15 @@ function renderDashboard(data) {
         <tr>
             <td><strong>📁 Unidade ${v.drive}</strong> (${v.label})</td>
             <td>Partição ${v.filesystem}</td>
-            <td>${v.size_gb} GB</td>
-            <td>${v.free_gb} GB</td>
+            <td>${v.size_gb} GiB</td>
+            <td>${v.free_gb} GiB</td>
             <td><span class="badge ${v.used_percent > 85 ? 'err' : 'ok'}">${v.used_percent}% ocupado</span></td>
         </tr>
     `).join("");
     document.getElementById("diskTableBody").innerHTML = diskRows + volRows;
 
-    // Aba Compatibilidade & Setup (Nova!)
     renderCompatibilityTab(compat);
 
-    // Aba Drivers & BIOS
     document.getElementById("btnVendorSupport").href = bios.vendor_support_url || "https://www.catalog.update.microsoft.com/";
     document.getElementById("biosSummaryBox").innerHTML = `
         <div class="kpi-card"><span class="kpi-label">FABRICANTE BIOS</span><strong>${bios.manufacturer}</strong></div>
@@ -443,7 +450,6 @@ function renderDashboard(data) {
     `;
     renderDriversTable(drv.drivers || []);
 
-    // Aba Softwares & Debloat
     document.getElementById("outdatedSwTableBody").innerHTML = (sw.outdated_software || []).map(s => `
         <tr>
             <td><strong>${s.name}</strong></td>
@@ -484,6 +490,441 @@ function renderDashboard(data) {
     renderLogsTable(data.action_logs || []);
 }
 
+// ==================== RENDERIZADOR COMPLETO DO MÓDULO DE ARMAZENAMENTO (v4.0) ====================
+function renderStorageSuiteTab(storageSuite) {
+    const devs = storageSuite.devices || [];
+    const selectEl = document.getElementById("storageDeviceSelect");
+    const invTbody = document.getElementById("storageInventoryTableBody");
+
+    if (!devs.length) {
+        invTbody.innerHTML = '<tr><td colspan="7">Nenhum dispositivo físico retornado pelo coletor.</td></tr>';
+        return;
+    }
+
+    if (SELECTED_STORAGE_INDEX >= devs.length) {
+        SELECTED_STORAGE_INDEX = 0;
+    }
+
+    selectEl.innerHTML = devs.map((d, idx) => `
+        <option value="${idx}" ${idx === SELECTED_STORAGE_INDEX ? 'selected' : ''}>
+            Disco #${d.disk_number}: ${d.brand} ${d.model} (${d.capacity?.formatted || ''}) — Risco ${d.risk_assessment?.risk_level || 'BAIXO'}
+        </option>
+    `).join("");
+
+    invTbody.innerHTML = devs.map((d, idx) => {
+        const rk = d.risk_assessment || {};
+        const rLvl = rk.risk_level || "BAIXO";
+        const rBadge = (rLvl === "ALTO" || rLvl === "CRÍTICO") ? "err" : (rLvl === "MODERADO" ? "warn" : "ok");
+        const stateBadges = [
+            d.is_online ? '<span class="badge ok">Online</span>' : '<span class="badge err">Offline</span>',
+            d.is_read_only ? '<span class="badge warn">Somente-Leitura</span>' : '',
+            d.has_raw_volume ? '<span class="badge err">Volume RAW</span>' : '',
+            `<span class="badge ${rBadge}">Risco ${rLvl} (${rk.health_score ?? 100}/100)</span>`
+        ].filter(Boolean).join(" ");
+
+        return `
+        <tr style="${idx === SELECTED_STORAGE_INDEX ? 'background:rgba(56,189,248,0.12);' : ''}cursor:pointer;" onclick="selectStorageDevice(${idx})">
+            <td><strong>Disk #${d.disk_number}</strong><br><small class="muted"><code>${d.device_path}</code></small></td>
+            <td><strong>${d.brand}</strong><br>${d.model}</td>
+            <td><code>${d.serial_number}</code><br><small class="muted">FW: ${d.firmware}</small></td>
+            <td><strong>${d.media_category}</strong><br><small class="muted">${d.protocol}</small></td>
+            <td><strong>${d.capacity?.formatted || ''}</strong><br><small class="muted">${(d.capacity?.bytes || 0).toLocaleString()} bytes</small></td>
+            <td><strong>${d.partition_style}</strong><br><small class="muted">${(d.drive_letters || []).join(", ") || "Sem Letra"}</small></td>
+            <td>${stateBadges}</td>
+        </tr>
+        `;
+    }).join("");
+
+    renderSelectedStorageDevice(devs[SELECTED_STORAGE_INDEX]);
+    renderStorageOpsLog(storageSuite.operations_log || []);
+}
+
+function selectStorageDevice(idx) {
+    SELECTED_STORAGE_INDEX = parseInt(idx, 10) || 0;
+    if (CURRENT_SNAPSHOT && CURRENT_SNAPSHOT.storage_suite) {
+        renderStorageSuiteTab(CURRENT_SNAPSHOT.storage_suite);
+    }
+}
+
+document.getElementById("storageDeviceSelect").addEventListener("change", (e) => {
+    selectStorageDevice(e.target.value);
+});
+
+document.getElementById("btnRefreshStorage").addEventListener("click", async () => {
+    const imp = document.getElementById("storageImportanceSelect").value;
+    showToast("🔄 Atualizando inventário avançado de discos, SMART e histórico SQLite...");
+    const res = await apiFetch(`/api/storage/scan?importance=${encodeURIComponent(imp)}`);
+    if (res.storage_suite) {
+        if (CURRENT_SNAPSHOT) CURRENT_SNAPSHOT.storage_suite = res.storage_suite;
+        renderStorageSuiteTab(res.storage_suite);
+        showToast("✅ Auditoria de armazenamento atualizada!");
+    }
+});
+
+function renderSelectedStorageDevice(dev) {
+    if (!dev) return;
+    const cap = dev.capacity || {};
+    const alloc = dev.allocated_capacity || {};
+    const unalloc = dev.unallocated_capacity || {};
+    const usedT = dev.used_total || {};
+    const freeT = dev.free_total || {};
+    const rk = dev.risk_assessment || {};
+    const lf = dev.lifespan || {};
+    const sm = dev.smart_summary || {};
+
+    // 2. Detalhes Técnicos & Controlador
+    document.getElementById("storageDeviceDetailsBox").innerHTML = `
+        <div class="kv-row"><span class="muted">Disco Físico / Caminho</span><strong>Disk #${dev.disk_number} (<code>${dev.device_path}</code>)</strong></div>
+        <div class="kv-row"><span class="muted">Fabricante / Marca / Modelo</span><strong>${dev.brand} — ${dev.model}</strong></div>
+        <div class="kv-row"><span class="muted">Número de Série / Firmware</span><span><code>${dev.serial_number}</code> | FW: <code>${dev.firmware}</code></span></div>
+        <div class="kv-row"><span class="muted">Tipo de Mídia & Rotação</span><strong>${dev.media_category} (${dev.spindle_rpm > 0 ? dev.spindle_rpm + ' RPM' : 'Estado Sólido / Sem Partes Móveis'})</strong></div>
+        <div class="kv-row"><span class="muted">Interface & Protocolo</span><span>${dev.interface} — ${dev.protocol}</span></div>
+        <div class="kv-row"><span class="muted">Controlador / Ponte Detectada</span><span>${dev.controller}</span></div>
+        <div class="kv-row"><span class="muted">Capacidade Física Total</span><strong>${cap.formatted} (<code>${(cap.bytes || 0).toLocaleString()} B</code>)</strong></div>
+        <div class="kv-row"><span class="muted">Alocado vs Não Alocado</span><span>Alocado: ${alloc.formatted} | Livre s/ Partição: <strong>${unalloc.formatted}</strong></span></div>
+        <div class="kv-row"><span class="muted">Espaço Utilizado vs Livre (Volumes)</span><span>Usado: <strong>${usedT.formatted}</strong> | Livre: <strong>${freeT.formatted}</strong></span></div>
+        <div class="kv-row"><span class="muted">Estado Operacional</span><span>Online: <strong>${dev.is_online ? 'Sim' : 'Não'}</strong> | Somente-Leitura: <strong>${dev.is_read_only ? 'SIM (Protegido)' : 'Não'}</strong> | Estilo: <strong>${dev.partition_style}</strong></span></div>
+    `;
+
+    const lims = dev.adapter_limitations || [];
+    const limBox = document.getElementById("storageAdapterLimitsBox");
+    if (lims.length) {
+        limBox.innerHTML = lims.map(l => `<div class="maint-card" style="border-color:#f59e0b;font-size:12.5px;margin-top:6px;">⚠️ <strong>Limitação de Adaptador/Controladora:</strong> ${l}</div>`).join("");
+    } else {
+        limBox.innerHTML = `<div class="muted" style="font-size:12px;">✅ Acesso direto à controladora sem bloqueios de ponte USB.</div>`;
+    }
+
+    // 8. Classificação de Risco & Plano de Ação
+    const rLvl = rk.risk_level || "BAIXO";
+    const riskCard = document.getElementById("storageRiskCard");
+    riskCard.style.borderLeftColor = (rLvl === "CRÍTICO" || rLvl === "ALTO") ? "#ef4444" : (rLvl === "MODERADO" ? "#f59e0b" : "#10b981");
+    const rBadge = (rLvl === "CRÍTICO" || rLvl === "ALTO") ? "err" : (rLvl === "MODERADO" ? "warn" : "ok");
+
+    document.getElementById("storageRiskSummaryBox").innerHTML = `
+        <div class="kv-row"><span class="muted">Classificação de Risco Atual</span><span class="badge ${rBadge}" style="font-size:13px;">RISCO ${rLvl} (Score: ${rk.health_score ?? 100}/100)</span></div>
+        <div class="kv-row"><span class="muted">Exige Imagem (.img) Antes de Reparar?</span><strong>${rk.requires_image_before_repair ? '🚨 SIM — Obrigatório Criar Imagem Antes!' : 'Não (Operação Normal)'}</strong></div>
+        <div class="kv-row"><span class="muted">Bloqueio de CHKDSK / Escrita Automática</span><strong>${rk.block_destructive_or_chkdsk_write ? '🔒 ATIVO (Proteção contra perda física)' : 'Liberado sob confirmação'}</strong></div>
+        <div class="kv-row"><span class="muted">Recomendação de Laboratório Cleanroom</span><strong>${rk.recommend_cleanroom_lab ? '🏥 RECOMENDADO (Suspeita de falha física severa)' : 'Não necessário'}</strong></div>
+        <div style="margin-top:6px;"><span class="muted">Evidências Avaliadas:</span><ul style="padding-left:18px;font-size:12.5px;margin-top:4px;">${(rk.reasons || []).map(r => `<li>${r}</li>`).join("")}</ul></div>
+    `;
+    document.getElementById("storageOrderedPlanList").innerHTML = (rk.ordered_action_plan || []).map(p => `<li style="margin-bottom:4px;">${p}</li>`).join("");
+
+    // 4. Vida Útil, TBW e Desgaste
+    document.getElementById("storageLifespanBox").innerHTML = `
+        <div class="kv-row"><span class="muted">Temperatura Atual do Disco</span><strong>🌡️ ${sm.temperature_c != null ? sm.temperature_c + ' °C' : 'Não reportada pelo dispositivo'} ${sm.temperature_max_c ? '(Máx: ' + sm.temperature_max_c + ' °C)' : ''}</strong></div>
+        <div class="kv-row"><span class="muted">Horas Totais de Funcionamento (POH)</span><strong>⏱️ ${lf.power_on_formatted || 'N/D'}</strong></div>
+        <div class="kv-row"><span class="muted">Ciclos de Energia / Inicializações</span><strong>🔄 ${sm.power_cycles != null ? sm.power_cycles.toLocaleString() + ' ciclos' : 'N/D'}</strong></div>
+        <div class="kv-row"><span class="muted">Total de Dados Lidos (Host Reads)</span><span>📖 ${lf.total_reads_formatted || 'N/D'}</span></div>
+        <div class="kv-row"><span class="muted">Total de Dados Gravados (Host Writes / TBW)</span><strong>✍️ ${lf.total_writes_formatted || 'N/D'} ${lf.avg_daily_write_gb ? '(~' + lf.avg_daily_write_gb + ' GB/dia)' : ''}</strong></div>
+        <div class="kv-row"><span class="muted">1. Vida Útil Reportada pelo Fabricante</span><strong style="color:#34d399;">${lf.manufacturer_reported_str || 'N/D'}</strong></div>
+        <div class="kv-row"><span class="muted">2. Desgaste Estimado por TBW de Referência</span><span style="color:#38bdf8;">${lf.estimated_tbw_str || 'N/D'}</span></div>
+    `;
+    document.getElementById("storageForecastDisclaimer").innerHTML = `ℹ️ <strong>Nota Técnica sobre Previsão de Falha:</strong> ${lf.failure_forecast_disclaimer || ''}`;
+
+    // 5. Histórico Persistente SQLite & Gráfico SVG
+    const degAlerts = lf.degradation_alerts || [];
+    document.getElementById("storageDegradationAlertsBox").innerHTML = degAlerts.length
+        ? degAlerts.map(a => `<div class="badge err" style="display:block;margin-bottom:4px;">${a}</div>`).join("")
+        : `<span class="badge ok">Sem degradação detectada entre as coletas históricas (${lf.snapshots_count || 1} registro(s) no SQLite)</span>`;
+
+    const series = lf.history_series || [];
+    renderStorageHistoryChart(series);
+    document.getElementById("storageHistoryTableBody").innerHTML = series.slice().reverse().map(s => `
+        <tr>
+            <td><code>${s.captured_at}</code></td>
+            <td>${s.temperature_c != null ? s.temperature_c + '°C' : '—'}</td>
+            <td>${s.power_on_hours != null ? s.power_on_hours + ' h' : '—'}</td>
+            <td>${s.total_writes_gb != null ? s.total_writes_gb + ' GB' : '—'}</td>
+            <td>${s.wear_percent_used != null ? s.wear_percent_used + '%' : '—'}</td>
+            <td>${s.reallocated_sectors || 0} / ${s.pending_sectors || 0}</td>
+            <td><span class="badge ${s.health_score >= 80 ? 'ok' : 'warn'}">${s.health_score}/100</span></td>
+        </tr>
+    `).join("") || '<tr><td colspan="7">Primeira coleta registrada.</td></tr>';
+
+    // 3. Tabela SMART Profunda
+    const smBadge = document.getElementById("smartSupportBadge");
+    smBadge.textContent = dev.smart_supported ? `SMART Ativo (${(dev.smart_attributes || []).length} atributos)` : "SMART Bloqueado pela Ponte/Controladora";
+    smBadge.className = `badge ${dev.smart_supported ? 'ok' : 'warn'}`;
+
+    document.getElementById("storageSmartTableBody").innerHTML = (dev.smart_attributes || []).map(a => {
+        const bCls = a.severity === "critical" ? "err" : (a.severity === "warning" ? "warn" : "ok");
+        return `
+        <tr>
+            <td><code>${a.id}</code></td>
+            <td><strong>${a.name}</strong></td>
+            <td>${a.current} / ${a.worst} (Lim: ${a.threshold})</td>
+            <td><code>${a.raw_hex}</code> (${a.raw_int})</td>
+            <td><strong>${a.interpreted}</strong></td>
+            <td><span class="badge ${bCls}">${(a.severity || 'ok').toUpperCase()}</span></td>
+            <td>${a.meaning} ${a.vendor_note ? `<br><small style="color:#38bdf8;">Nota: ${a.vendor_note}</small>` : ''}</td>
+        </tr>
+        `;
+    }).join("") || '<tr><td colspan="7">Nenhum atributo SMART retornado pela controladora (verifique limitações de ponte USB ou permissões de Administrador).</td></tr>';
+
+    // 7. Diagnóstico Especializado de Falhas
+    document.getElementById("storageFaultsListBox").innerHTML = (dev.fault_diagnostics || []).map(f => {
+        const bCls = f.severity === "critical" ? "err" : (f.severity === "warning" ? "warn" : "ok");
+        return `
+        <div class="maint-card" style="margin-bottom:8px;">
+            <div class="flex-between">
+                <strong>${f.title}</strong>
+                <span class="badge ${bCls}">${f.category}</span>
+            </div>
+            <div style="font-size:12px;color:#94a3b8;margin:4px 0;">Evidência: <code>${f.evidence}</code></div>
+            <p style="font-size:13px;margin:4px 0;">${f.explanation}</p>
+            <div style="font-size:12.5px;color:#38bdf8;"><strong>Ação Recomendada:</strong> ${f.recommendation}</div>
+        </div>
+        `;
+    }).join("");
+
+    // 8. Partições e Sistemas de Arquivos
+    document.getElementById("storagePartitionsTableBody").innerHTML = (dev.partitions || []).map(p => {
+        const bCls = p.is_raw ? "err" : (p.used_percent >= 88 ? "warn" : "ok");
+        return `
+        <tr>
+            <td><strong>#${p.partition_number} (${p.drive_letter})</strong></td>
+            <td>${p.label}</td>
+            <td><span class="badge ${p.is_raw ? 'err' : 'ok'}">${p.filesystem}</span></td>
+            <td>${p.capacity?.gb || 0} GB (${p.capacity?.gib || 0} GiB)</td>
+            <td>${p.free_gib} GiB</td>
+            <td><span class="badge ${bCls}">${p.is_raw ? 'VOLUME RAW (Não Formatar!)' : p.used_percent + '% usado'}</span></td>
+        </tr>
+        `;
+    }).join("") || '<tr><td colspan="6">Nenhuma partição reconhecida (Disco Não Inicializado ou Sem Tabela de Partições).</td></tr>';
+
+    // Preenche a letra de unidade padrão na caixa de reparo lógico
+    if (dev.drive_letters && dev.drive_letters.length > 0) {
+        document.getElementById("recLogicalDriveInput").value = dev.drive_letters[0];
+    }
+}
+
+function renderStorageHistoryChart(series) {
+    const box = document.getElementById("storageHistoryChartBox");
+    if (!series || !series.length) {
+        box.innerHTML = '<p class="muted">Sem pontos históricos para plotar gráfico.</p>';
+        return;
+    }
+    const w = 460;
+    const h = 95;
+    const pts = series.slice(-12);
+    const stepX = pts.length > 1 ? (w - 40) / (pts.length - 1) : 0;
+
+    const tempCoords = pts.map((p, i) => {
+        const x = 20 + i * stepX;
+        const val = Math.min(90, Math.max(20, Number(p.temperature_c || 40)));
+        const y = h - 18 - ((val - 20) / 70) * (h - 32);
+        return `${x},${y.toFixed(1)}`;
+    }).join(" ");
+
+    const scoreCoords = pts.map((p, i) => {
+        const x = 20 + i * stepX;
+        const val = Math.min(100, Math.max(0, Number(p.health_score ?? 100)));
+        const y = h - 18 - (val / 100) * (h - 32);
+        return `${x},${y.toFixed(1)}`;
+    }).join(" ");
+
+    box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-bottom:4px;">
+            <span>📈 Evolução Histórica SQLite (${pts.length} coleta(s))</span>
+            <span><strong style="color:#10b981;">● Score Saúde</strong> &nbsp;|&nbsp; <strong style="color:#38bdf8;">● Temperatura (°C)</strong></span>
+        </div>
+        <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:95px;overflow:visible;">
+            <line x1="20" y1="${h - 18}" x2="${w - 20}" y2="${h - 18}" stroke="#334155" stroke-width="1"/>
+            ${pts.length > 1 ? `<polyline fill="none" stroke="#10b981" stroke-width="2.2" points="${scoreCoords}"/>` : ''}
+            ${pts.length > 1 ? `<polyline fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="4,2" points="${tempCoords}"/>` : ''}
+            ${pts.map((p, i) => {
+                const x = 20 + i * stepX;
+                const valT = Math.min(90, Math.max(20, Number(p.temperature_c || 40)));
+                const yT = h - 18 - ((valT - 20) / 70) * (h - 32);
+                return `<circle cx="${x}" cy="${yT.toFixed(1)}" r="3.5" fill="#38bdf8"><title>${p.captured_at}: ${p.temperature_c || 40}°C | Score ${p.health_score}</title></circle>`;
+            }).join("")}
+        </svg>
+    `;
+}
+
+// 6. Execução de Testes de Integridade e Desempenho
+async function runStorageTest(testType, confirmWrite = "") {
+    if (!CURRENT_SNAPSHOT || !CURRENT_SNAPSHOT.storage_suite) return;
+    const devs = CURRENT_SNAPSHOT.storage_suite.devices || [];
+    const dev = devs[SELECTED_STORAGE_INDEX];
+    if (!dev) return;
+
+    const outBox = document.getElementById("storageTestProgressBox");
+    outBox.innerHTML = `⏳ Executando <strong>${testType}</strong> em <strong>${dev.brand} ${dev.model}</strong>... Aguarde.`;
+
+    const res = await apiFetch("/api/storage/test", {
+        method: "POST",
+        body: JSON.stringify({
+            disk_number: dev.disk_number,
+            device_uid: dev.device_uid,
+            test_type: testType,
+            sample_mb: 16,
+            block_size_kb: 256,
+            confirm_write_risk: confirmWrite
+        })
+    });
+
+    const blocksHtml = (res.block_samples || []).slice(0, 24).map(b => {
+        const bg = b.status === "error" ? "#ef4444" : (b.status === "slow" ? "#f59e0b" : "#10b981");
+        return `<span title="Bloco #${b.block}: ${b.latency_ms} ms (${b.speed_mb_s} MB/s)" style="display:inline-block;width:16px;height:16px;border-radius:3px;background:${bg};margin:2px;"></span>`;
+    }).join("");
+
+    outBox.innerHTML = `
+        <div class="flex-between">
+            <strong>Resultado: ${res.test_type || testType}</strong>
+            <span class="badge ${res.status_badge || (res.success ? 'ok' : 'err')}">${res.success ? 'CONCLUÍDO' : 'ALERTA / BLOQUEADO'}</span>
+        </div>
+        <p style="margin:6px 0;font-weight:600;">${res.message || ''}</p>
+        ${res.bytes_examined != null ? `
+        <div class="kv-row"><span class="muted">Velocidade / Latência / IOPS</span><strong>⚡ ${res.speed_mb_s || 0} MB/s | Latência Média: ${res.avg_latency_ms || 0} ms (Máx: ${res.max_latency_ms || 0} ms) | ~${res.iops_estimate || 0} IOPS</strong></div>
+        <div class="kv-row"><span class="muted">Bytes Examinados & Erros</span><span>Examinados: <strong>${(res.bytes_examined || 0).toLocaleString()} bytes (${res.examined_mb || 0} MB)</strong> | Blocos Lentos (&gt;150ms): <strong>${res.slow_blocks_count || 0}</strong> | Erros I/O: <strong>${res.io_errors_count || 0}</strong></span></div>
+        <div class="kv-row"><span class="muted">Áreas Não Testadas</span><small class="muted">${res.untested_note || ''}</small></div>
+        <div style="margin-top:6px;">${blocksHtml}</div>
+        ` : ''}
+    `;
+    showToast(res.message || "Teste de disco concluído.");
+}
+
+function runStorageWriteTestPrompt() {
+    const token = prompt(
+        "ATENÇÃO: O AegisPulse não executa testes de escrita por padrão para proteger os dados do disco.\n\n" +
+        "Para autorizar um teste controlado de escrita em arquivo temporário (bloqueado se houver falha física), digite exatamente:\n" +
+        "CONFIRMAR_ESCRITA_RISCO_DADOS"
+    );
+    if (token !== null) {
+        runStorageTest("write_verify", token);
+    }
+}
+
+// 9. Ações de Recuperação Assistida (Imagem, Partições, Arquivos e Reparo Lógico)
+document.getElementById("btnStartResumeImage").addEventListener("click", async () => {
+    const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
+    const dev = devs[SELECTED_STORAGE_INDEX];
+    if (!dev) return;
+
+    const destPath = document.getElementById("recImageDestInput").value.trim();
+    const maxMb = parseInt(document.getElementById("recImageMaxMbInput").value || "16", 10);
+    const confirmTok = document.getElementById("recImageConfirmInput").value.trim();
+    const out = document.getElementById("storageRecoveryOutputBox");
+
+    out.textContent = "⏳ Validando Origem/Destino e iniciando/retomando Imagem Resiliente com Mapfile...";
+    const res = await apiFetch("/api/storage/recovery/image", {
+        method: "POST",
+        body: JSON.stringify({
+            disk_number: dev.disk_number,
+            device_uid: dev.device_uid,
+            destination_path: destPath,
+            max_mb: maxMb,
+            confirm_token: confirmTok,
+            resume: true
+        })
+    });
+
+    out.textContent =
+        `[CLONAGEM / IMAGEM SETOR-A-SETOR COM MAPFILE]\n` +
+        `Status            : ${res.status || (res.success ? 'OK' : 'BLOQUEADO')}\n` +
+        `Mensagem          : ${res.message}\n` +
+        (res.image_path ? `Arquivo de Imagem : ${res.image_path}\nMapfile JSON      : ${res.mapfile_path}\nMapfile ddrescue  : ${res.ddrescue_map_path}\nProgresso         : ${res.progress_pct}% (${res.speed_mb_s} MB/s | Erros isolados: ${res.read_errors_count})\nComando ddrescue  : ${res.ddrescue_recommended_command}\n` : "");
+    showToast(res.message);
+});
+
+document.getElementById("btnCancelImage").addEventListener("click", async () => {
+    const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
+    const dev = devs[SELECTED_STORAGE_INDEX];
+    if (!dev) return;
+    const res = await apiFetch("/api/storage/recovery/cancel", {
+        method: "POST",
+        body: JSON.stringify({ device_uid: dev.device_uid })
+    });
+    showToast(res.message);
+});
+
+document.getElementById("btnInspectPartitions").addEventListener("click", async () => {
+    const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
+    const dev = devs[SELECTED_STORAGE_INDEX];
+    if (!dev) return;
+    const imgPath = document.getElementById("recSourceImageInput").value.trim();
+    const out = document.getElementById("storageRecoveryOutputBox");
+    out.textContent = "⏳ Inspecionando cabeçalhos MBR (Setor 0) / GPT (LBA 1) e preparando integração TestDisk...";
+    const res = await apiFetch("/api/storage/recovery/partitions", {
+        method: "POST",
+        body: JSON.stringify({
+            disk_number: dev.disk_number,
+            device_uid: dev.device_uid,
+            image_path: imgPath
+        })
+    });
+    out.textContent =
+        `[INSPEÇÃO DE PARTIÇÕES MBR/GPT & TESTDISK]\n` +
+        `${res.prioritize_image_warning ? res.prioritize_image_warning + '\n\n' : ''}` +
+        `Descobertas       :\n- ${(res.header_findings || []).join("\n- ")}\n\n` +
+        `Comando TestDisk  : ${res.testdisk_command}`;
+    showToast(res.message);
+});
+
+document.getElementById("btnRecoverFiles").addEventListener("click", async () => {
+    const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
+    const dev = devs[SELECTED_STORAGE_INDEX];
+    if (!dev) return;
+    const destFolder = document.getElementById("recFilesDestInput").value.trim();
+    const srcImg = document.getElementById("recSourceImageInput").value.trim();
+    const out = document.getElementById("storageRecoveryOutputBox");
+    out.textContent = "⏳ Validando unidade de destino e executando recuperação segura de arquivos...";
+    const res = await apiFetch("/api/storage/recovery/files", {
+        method: "POST",
+        body: JSON.stringify({
+            disk_number: dev.disk_number,
+            device_uid: dev.device_uid,
+            destination_folder: destFolder,
+            source_image_path: srcImg
+        })
+    });
+    out.textContent =
+        `[RECUPERAÇÃO ASSISTIDA DE ARQUIVOS — PHOTOREC / ASSINATURAS]\n` +
+        `Mensagem          : ${res.message}\n` +
+        (res.limitations_disclaimer ? `\n${res.limitations_disclaimer}\n` : "") +
+        (res.photorec_command ? `\nComando PhotoRec  : ${res.photorec_command}` : "");
+    showToast(res.message);
+});
+
+async function runLogicalRepairMode(mode) {
+    const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
+    const dev = devs[SELECTED_STORAGE_INDEX];
+    if (!dev) return;
+    const dl = document.getElementById("recLogicalDriveInput").value.trim();
+    const confirmRep = document.getElementById("recLogicalConfirmInput").value.trim();
+    const out = document.getElementById("storageRecoveryOutputBox");
+    out.textContent = `⏳ Executando rotina lógica (${mode}) em ${dl}...`;
+    const res = await apiFetch("/api/storage/recovery/logical-repair", {
+        method: "POST",
+        body: JSON.stringify({
+            disk_number: dev.disk_number,
+            device_uid: dev.device_uid,
+            drive_letter: dl,
+            mode,
+            confirm_repair: confirmRep
+        })
+    });
+    out.textContent = `[REPARAÇÃO LÓGICA WINDOWS — MODO: ${mode.toUpperCase()}]\n${res.message}\n\n${res.output || res.dirty_bit_status || ''}`;
+    showToast(res.message);
+}
+
+function renderStorageOpsLog(ops) {
+    const tbody = document.getElementById("storageOpsLogTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = (ops || []).map(o => `
+        <tr>
+            <td><code>${o.timestamp}</code></td>
+            <td><code>${o.device_uid}</code></td>
+            <td><strong>${o.operation_type}</strong></td>
+            <td><span class="badge ${o.risk_level === 'ALTO' || o.risk_level === 'CRÍTICO' ? 'err' : 'ok'}">${o.risk_level || 'BAIXO'}</span></td>
+            <td><code>${o.status}</code></td>
+            <td>${o.summary}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="6">Nenhuma operação de armazenamento registrada ainda.</td></tr>';
+}
+
+// ==================== DEMAIS ABAS EXISTENTES ====================
 function renderCompatibilityTab(compat) {
     document.getElementById("compatCpuBox").innerHTML = `
         <div class="kv-row"><span class="muted">Placa-Mãe Detectada</span><strong>${compat.motherboard_model || 'N/D'}</strong></div>
@@ -849,7 +1290,7 @@ document.getElementById("btnSaveConfig").addEventListener("click", async () => {
 
 // Exportar Laudo HTML / PDF
 async function exportHtmlReport() {
-    showToast("📄 Gerando Laudo Técnico Executivo HTML/PDF v3.0...");
+    showToast("📄 Gerando Laudo Técnico Executivo HTML/PDF v4.0...");
     const res = await apiFetch("/api/report/generate", { method: "POST" });
     if (res.success && res.url) {
         window.open(res.url, "_blank");

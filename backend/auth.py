@@ -3,9 +3,9 @@
 """
 ================================================================================
 PROJETO: AegisPulse IT Toolkit
-ARQUIVO: backend/auth.py (Licenciamento Comercial v3.0: Trial, Assinante e ADM)
+ARQUIVO: backend/auth.py (Licenciamento Comercial v3.0.1: Trial, Assinante e ADM)
 AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-VERSÃO:  3.0.0
+VERSÃO:  3.0.1
 ================================================================================
 Descrição:
 Gerencia os 3 modos comerciais de acesso do AegisPulse IT Toolkit:
@@ -16,8 +16,8 @@ Gerencia os 3 modos comerciais de acesso do AegisPulse IT Toolkit:
    AEGIS-PRO-YYYYMMDD-CLIENTE-HASH. Libera análises ilimitadas e motores de IA
    em nuvem (Google Gemini e Grok/xAI), mantendo ocultas as abas exclusivas ADM.
 3. MODO ADMINISTRADOR MASTER (Exclusivo Adriano Barboza): Desbloqueado com a
-   nova senha Master configurada pelo autor (SHA-256), liberando as abas
-   exclusivas de CRM SQLite, Precificação Justa, Orçamento para Cliente e Keygen.
+   nova senha Master configurada pelo autor (SHA-256 real validado), liberando as
+   abas exclusivas de CRM SQLite, Precificação Justa, Orçamento e Keygen.
 """
 
 import hmac
@@ -30,9 +30,17 @@ from pathlib import Path
 MASTER_LICENSE_SECRET = b"AEGISPULSE_ADRIANO_BARBOZA_MASTER_SECRET_2026"
 DEFAULT_TRIAL_LIMIT = 4
 
-# Hash SHA-256 da senha Master definida por Adriano Barboza (Luna@19102023)
+# Hash SHA-256 exato da senha Master definida por Adriano Barboza (Luna@19102023)
+# Calculado via hashlib.sha256("Luna@19102023".encode("utf-8")).hexdigest()
 # A senha nunca fica exposta em texto puro no repositório público do GitHub.
-MASTER_ADMIN_HASH = "30e489d9b17b72bf6bc9b120e1274a34189872b85094933b4166e3d217f847be"
+MASTER_ADMIN_HASH = "1fd12a251366b5ab823d6bc19c780f5dd04ae40b76e1bd07a91a679f2670e196"
+
+# Hashes legados para migração transparente do config.json local
+LEGACY_HASHES = {
+    "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+    "30e489d9b17b72bf6bc9b120e1274a34189872b85094933b4166e3d217f847be",
+    "",
+}
 
 AUTHOR_WHATSAPP = "+55 61 98515-8434"
 AUTHOR_WHATSAPP_URL = "https://wa.me/5561985158434?text=Ol%C3%A1%20Adriano%20Barboza!%20Estou%20usando%20o%20AegisPulse%20IT%20Toolkit%20e%20quero%20adquirir%20uma%20Chave%20de%20Assinatura%20PRO!"
@@ -42,7 +50,7 @@ ACTIVE_SESSIONS: dict[str, dict] = {}
 
 def hash_pin(raw_pin: str) -> str:
     """Retorna o hash SHA-256 de uma senha ou PIN."""
-    return hashlib.sha256(raw_pin.strip().encode("utf-8")).hexdigest()
+    return hashlib.sha256((raw_pin or "").strip().encode("utf-8")).hexdigest()
 
 
 def load_config(base_dir: Path) -> dict:
@@ -51,7 +59,7 @@ def load_config(base_dir: Path) -> dict:
         "author": "Adriano Barboza",
         "author_whatsapp": AUTHOR_WHATSAPP,
         "app_name": "AegisPulse IT Toolkit",
-        "version": "3.0.0",
+        "version": "3.0.1",
         "server_host": "127.0.0.1",
         "server_port": 8765,
         "require_operator_pin": True,
@@ -68,10 +76,15 @@ def load_config(base_dir: Path) -> dict:
         try:
             with open(cfg_path, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
-                # Se ainda estiver com o hash antigo de 'admin123', atualiza automaticamente para a nova senha Master
-                old_admin123_hash = "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"
-                if loaded.get("operator_pin_sha256") == old_admin123_hash:
+                # Migra automaticamente caso o config.json contenha qualquer hash legado
+                if loaded.get("operator_pin_sha256") in LEGACY_HASHES:
                     loaded["operator_pin_sha256"] = MASTER_ADMIN_HASH
+                    try:
+                        with open(cfg_path, "w", encoding="utf-8") as fw:
+                            merged = {**default_cfg, **loaded}
+                            json.dump(merged, fw, indent=2, ensure_ascii=False)
+                    except Exception:
+                        pass
                 default_cfg.update(loaded)
         except Exception:
             pass

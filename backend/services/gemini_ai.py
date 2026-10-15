@@ -5,20 +5,17 @@
 PROJETO: AegisPulse IT Toolkit
 ARQUIVO: backend/services/gemini_ai.py
 AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-VERSÃO:  3.0.0
+VERSÃO:  4.0.0
 ================================================================================
 Descrição:
-Suporte a 3 Motores de Inteligência Artificial com controle comercial por perfil:
-1. IA LOCAL AEGISPULSE N3 (provider = 'local'):
-   - Liberada gratuitamente tanto para Usuários em MODO TRIAL quanto para
-     Assinantes PRO e Administrador Master. Funciona até sem internet!
-2. GOOGLE GEMINI 3.X CLOUD AI (provider = 'gemini'):
-   - Exclusivo para Assinantes PRO e Administrador Master.
-   - Se acionado por um usuário em Modo Trial, exibe um convite comercial
-     intuitivo para assinar via WhatsApp (+55 61 98515-8434).
-3. XAI GROK / GROQ CLOUD AI (provider = 'grok'):
-   - Exclusivo para Assinantes PRO e Administrador Master.
-   - Compatível com chaves xAI Grok (xai-...) e GroqCloud LPU (gsk_...).
+Etapa 10 — Integração com Motores de IA (IA Local N3, Google Gemini 3.x e xAI Grok):
+- Inclui toda a telemetria avançada de armazenamento (Inventário, SMART, Vida Útil,
+  TBW, Classificação de Risco, Diagnóstico Especializado de Falhas e Testes).
+- Gera diagnósticos fundamentados em evidências, hipóteses alternativas (ex: erro
+  CRC no cabo vs setor defeituoso), testes não-destrutivos recomendados e planos
+  de ação ordenados por risco.
+- Regra Estrita: A IA nunca inventa métricas, nunca promete data exata de falha
+  ou garantia absoluta de recuperação de dados, e nunca executa comandos destrutivos.
 """
 
 import json
@@ -54,6 +51,39 @@ def sanitize_snapshot_for_ai(snapshot: dict) -> dict:
     sw = snapshot.get("software", {})
     gaming = snapshot.get("gaming", {})
     net = snapshot.get("network", {})
+    st_suite = snapshot.get("storage_suite", {})
+
+    storage_summary = []
+    for d in (st_suite.get("devices") or []):
+        storage_summary.append({
+            "disk_number": d.get("disk_number"),
+            "brand": d.get("brand"),
+            "model": d.get("model"),
+            "serial_number": d.get("serial_number"),
+            "firmware": d.get("firmware"),
+            "media_category": d.get("media_category"),
+            "interface": d.get("interface"),
+            "protocol": d.get("protocol"),
+            "controller": d.get("controller"),
+            "capacity_formatted": d.get("capacity", {}).get("formatted"),
+            "partition_style": d.get("partition_style"),
+            "drive_letters": d.get("drive_letters"),
+            "is_online": d.get("is_online"),
+            "is_read_only": d.get("is_read_only"),
+            "has_raw_volume": d.get("has_raw_volume"),
+            "adapter_limitations": d.get("adapter_limitations"),
+            "smart_summary": d.get("smart_summary"),
+            "lifespan": {
+                "power_on_formatted": d.get("lifespan", {}).get("power_on_formatted"),
+                "manufacturer_reported_str": d.get("lifespan", {}).get("manufacturer_reported_str"),
+                "estimated_tbw_str": d.get("lifespan", {}).get("estimated_tbw_str"),
+                "total_reads_formatted": d.get("lifespan", {}).get("total_reads_formatted"),
+                "total_writes_formatted": d.get("lifespan", {}).get("total_writes_formatted"),
+                "degradation_alerts": d.get("lifespan", {}).get("degradation_alerts", []),
+            },
+            "risk_assessment": d.get("risk_assessment"),
+            "fault_diagnostics": d.get("fault_diagnostics"),
+        })
 
     return {
         "manufacturer": hw.get("manufacturer"),
@@ -65,6 +95,10 @@ def sanitize_snapshot_for_ai(snapshot: dict) -> dict:
         "gpus": hw.get("gpus"),
         "disks": hw.get("disks"),
         "volumes": hw.get("volumes"),
+        "storage_forensics_v4": {
+            "highest_risk_level": st_suite.get("highest_risk_level", "BAIXO"),
+            "devices": storage_summary,
+        },
         "os": os_info,
         "bios": {
             "smbios_version": drv.get("bios", {}).get("smbios_version"),
@@ -88,7 +122,7 @@ def sanitize_snapshot_for_ai(snapshot: dict) -> dict:
 
 
 def generate_local_expert_analysis(ctx: dict, user_prompt: str = "", cloud_notice: str = "") -> str:
-    """Motor Especialista Heurístico N3 Nativo do AegisPulse (Liberado para Trial, Assinantes e ADM)."""
+    """Motor Especialista Heurístico N3 Nativo do AegisPulse v4.0 (Liberado para Trial, Assinantes e ADM)."""
     manuf = ctx.get("manufacturer") or "Equipamento"
     model = ctx.get("model") or "Workstation"
     temps = ctx.get("temperatures") or {}
@@ -105,11 +139,9 @@ def generate_local_expert_analysis(ctx: dict, user_prompt: str = "", cloud_notic
     os_data = ctx.get("os") or {}
     os_str = f"{os_data.get('os_name', 'Windows')} ({os_data.get('display_version', '')} - Build {os_data.get('full_build', '')})"
 
-    disks = ctx.get("disks") or []
-    disk_summary = ", ".join(
-        f"{d.get('model')} ({d.get('media_type')}, {d.get('size_gb')} GB, SMART: {d.get('health_status')})"
-        for d in disks
-    ) or "Unidades padrão"
+    st_v4 = ctx.get("storage_forensics_v4") or {}
+    st_devs = st_v4.get("devices") or []
+    highest_risk = st_v4.get("highest_risk_level", "BAIXO")
 
     bios = ctx.get("bios") or {}
     outdated_sw = ctx.get("outdated_software") or []
@@ -122,7 +154,7 @@ def generate_local_expert_analysis(ctx: dict, user_prompt: str = "", cloud_notic
         sw_names += f" e mais {len(outdated_sw) - 8} pacote(s)"
 
     lines = []
-    lines.append("[Motor Utilizado: 🧠 IA Local AegisPulse N3 (Diagnóstico Embarcado Instantâneo)]")
+    lines.append("[Motor Utilizado: 🧠 IA Local AegisPulse N3 v4.0 (Diagnóstico Forense Baseado em Evidências)]")
     if cloud_notice:
         lines.append(f"[Info: {cloud_notice}]")
     lines.append("")
@@ -133,11 +165,41 @@ def generate_local_expert_analysis(ctx: dict, user_prompt: str = "", cloud_notic
     lines.append(f"- **Processador & Temperatura Atual:** {cpu_name} — **{cpu_t}°C** ({temps.get('cpu_temp_status', 'Normal')})")
     lines.append(f"- **Placa de Vídeo & Temperatura Atual:** {gpu_name} — **{gpu_t}°C** ({temps.get('gpu_temp_status', 'Normal')})")
     lines.append(f"- **Memória RAM:** {ram_gb} GB instalados em {len(ram_mods)} módulo(s)")
-    lines.append(f"- **Armazenamento & SMART:** {disk_summary}")
     lines.append(f"- **Classificação PC Gamer:** {gp.get('gamer_tier', 'N/D')} (Alvo: {gp.get('target_resolution', '1080p')})")
     lines.append(f"- **Firmware BIOS/UEFI:** Versão `{bios.get('smbios_version', 'N/D')}` ({bios.get('release_date', 'N/D')} - {bios.get('status_label', 'OK')})")
     lines.append("")
-    lines.append("### Prioridades de Intervenção Técnica")
+    lines.append(f"### 2. AUDITORIA FORENSE DE ARMAZENAMENTO, SMART & RISCO (Risco Global: {highest_risk})")
+    if st_devs:
+        for d in st_devs:
+            sm = d.get("smart_summary") or {}
+            lf = d.get("lifespan") or {}
+            rk = d.get("risk_assessment") or {}
+            lines.append(
+                f"- **Disco #{d.get('disk_number')} — {d.get('brand')} {d.get('model')} (`{d.get('serial_number')}`):** "
+                f"{d.get('media_category')} | Capacidade: **{d.get('capacity_formatted')}** | "
+                f"Estilo: `{d.get('partition_style')}` ({', '.join(d.get('drive_letters') or ['Sem Letra'])}) | "
+                f"Score SMART: **{rk.get('health_score', 100)}/100 (Risco {rk.get('risk_level', 'BAIXO')})**."
+            )
+            lines.append(
+                f"  - **Telemetria SMART & Vida Útil:** Temp: `{sm.get('temperature_c', 'N/D')}°C` | "
+                f"Horas Ligado: `{lf.get('power_on_formatted', 'N/D')}` | "
+                f"Vida Útil Reportada: `{lf.get('manufacturer_reported_str', 'N/D')}` | "
+                f"Gravações (TBW): `{lf.get('total_writes_formatted', 'N/D')}`."
+            )
+            lines.append(
+                f"  - **Contadores de Integridade:** Setores Realocados: `{sm.get('reallocated_sectors') or 0}` | "
+                f"Pendentes: `{sm.get('pending_sectors') or 0}` | Incorrigíveis: `{sm.get('uncorrectable_errors') or 0}` | "
+                f"Erros CRC Interface: `{sm.get('crc_interface_errors') or 0}`."
+            )
+            for fd in (d.get("fault_diagnostics") or []):
+                lines.append(f"  - **Diagnóstico ({fd.get('category')}):** {fd.get('title')} — {fd.get('explanation')} *Ação: {fd.get('recommendation')}*")
+            for step in (rk.get("ordered_action_plan") or []):
+                lines.append(f"  - **Plano Ordenado por Risco:** {step}")
+    else:
+        lines.append("- Coleta detalhada de discos disponível na aba Discos, SMART & Recuperação.")
+
+    lines.append("")
+    lines.append("### 3. PRIORIDADES GERAIS DE INTERVENÇÃO TÉCNICA")
     if outdated_sw:
         lines.append(f"- **Softwares Obsoletos ({len(outdated_sw)}):** Atualizar via Winget ({sw_names}).")
     else:
@@ -151,26 +213,25 @@ def generate_local_expert_analysis(ctx: dict, user_prompt: str = "", cloud_notic
     if outdated_drv > 0:
         lines.append(f"- **Drivers Antigos:** {outdated_drv} controlador(es) com mais de 36 meses. Verificar atualizações oficiais.")
 
-    for b in gp.get("bottlenecks_and_alerts", []):
-        lines.append(f"- **Análise de Equilíbrio/Gargalo:** {b}")
-
     if user_prompt.strip():
         lines.append("")
-        lines.append(f"### Resposta à Pergunta Técnica ('{user_prompt.strip()}')")
+        lines.append(f"### Resposta Fundamentada à Consulta Técnica ('{user_prompt.strip()}')")
         lines.append(
-            f"- Com base no conjunto `{cpu_name}` + `{gpu_name}` + `{ram_gb} GB RAM`, o equipamento opera em `{gp.get('gamer_tier', 'Alto Desempenho')}` com temperaturas atuais de `{cpu_t}°C` (CPU) e `{gpu_t}°C` (GPU)."
+            f"- Com base nas evidências reais coletadas em `{manuf} {model}` (Risco de Armazenamento: `{highest_risk}`, CPU a `{cpu_t}°C`, GPU a `{gpu_t}°C`), "
+            "recomenda-se sempre executar primeiro testes não-destrutivos de leitura e preservar cópia/imagem antes de qualquer reparo lógico."
         )
 
     lines.append("")
     lines.append("---")
     lines.append("")
-    lines.append("### 2. PARECER PARA O CLIENTE")
+    lines.append("### 4. PARECER PARA O CLIENTE")
     lines.append("")
     lines.append(
         f"Prezado(a) Cliente,\n\n"
-        f"Concluímos a inspeção completa do seu computador **{manuf} {model}** através da suíte **AegisPulse IT Toolkit**.\n\n"
-        f"- **Saúde Física e Temperaturas:** Seu processador (**{cpu_name}** a **{cpu_t}°C**), placa de vídeo (**{gpu_name}** a **{gpu_t}°C**), seus **{ram_gb} GB de memória RAM** e seus discos rígidos/SSDs estão operando com saúde física aprovada.\n"
-        f"- **Manutenção Preventiva Recomendada:** Identificamos **{len(outdated_sw)} programa(s)** com atualizações de segurança pendentes e oportunidades de otimização de armazenamento e drivers para deixar sua máquina ainda mais rápida e estável.\n\n"
+        f"Concluímos a auditoria completa de hardware, saúde de armazenamento (SMART) e sistema do seu computador **{manuf} {model}** com o **AegisPulse IT Toolkit v4.0**.\n\n"
+        f"- **Saúde Térmica e Desempenho:** Processador (**{cpu_name}** a **{cpu_t}°C**), placa de vídeo (**{gpu_name}** a **{gpu_t}°C**) e **{ram_gb} GB de RAM** inspecionados.\n"
+        f"- **Saúde de Discos e Dados:** Nível de risco global de armazenamento classificado como **{highest_risk}** (nossa análise avalia desgaste, setores físicos e integridade sem colocar seus arquivos em risco).\n"
+        f"- **Manutenção Preventiva:** Identificamos **{len(outdated_sw)} programa(s)** com atualizações pendentes e oportunidades de otimização segura.\n\n"
         f"Atenciosamente,\n"
         f"**Adriano Barboza** — Especialista em TI | WhatsApp: **+55 61 98515-8434**"
     )
@@ -178,7 +239,6 @@ def generate_local_expert_analysis(ctx: dict, user_prompt: str = "", cloud_notic
 
 
 def _query_grok_or_groq_cloud(api_key: str, prompt_text: str) -> dict:
-    """Consulta a API da xAI Grok (xai-...) ou GroqCloud LPU (gsk_...) compatível com OpenAI."""
     clean_key = (api_key or "").strip()
     if not clean_key:
         return {
@@ -199,10 +259,10 @@ def _query_grok_or_groq_cloud(api_key: str, prompt_text: str) -> dict:
     payload = {
         "model": model_name,
         "messages": [
-            {"role": "system", "content": "Você é o especialista N3 embarcado no AegisPulse IT Toolkit de Adriano Barboza."},
+            {"role": "system", "content": "Você é o especialista N3 embarcado no AegisPulse IT Toolkit v4.0 de Adriano Barboza."},
             {"role": "user", "content": prompt_text},
         ],
-        "temperature": 0.3,
+        "temperature": 0.25,
     }
 
     req = urllib.request.Request(
@@ -211,7 +271,7 @@ def _query_grok_or_groq_cloud(api_key: str, prompt_text: str) -> dict:
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {clean_key}",
-            "User-Agent": "AegisPulse-Toolkit/3.0",
+            "User-Agent": "AegisPulse-Toolkit/4.0",
         },
         method="POST",
     )
@@ -248,12 +308,6 @@ def query_gemini_ai(
     user_role: str = "admin",
     grok_api_key: str = "",
 ) -> dict:
-    """
-    Roteador Multi-IA v3.0:
-    - provider == 'local': Usa IA Local N3 (disponível para Trial, Assinante PRO e ADM).
-    - provider == 'gemini' ou 'grok': Exclusivo para Assinante PRO e ADM Master!
-      Se o usuário estiver em Modo Trial, exibe um convite comercial intuitivo para assinar.
-    """
     sanitized_context = sanitize_snapshot_for_ai(snapshot)
 
     # 1. IA Local AegisPulse N3 (Liberada para TODOS, inclusive Trial)
@@ -262,7 +316,7 @@ def query_gemini_ai(
         return {
             "online": True,
             "success": True,
-            "model_used": "AegisPulse-Local-N3",
+            "model_used": "AegisPulse-Local-N3-v4",
             "message": "Diagnóstico gerado instantaneamente pela IA Local AegisPulse N3!",
             "response_text": local_text,
         }
@@ -302,18 +356,22 @@ def query_gemini_ai(
         return {
             "online": False,
             "success": True,
-            "model_used": "AegisPulse-Local-N3",
+            "model_used": "AegisPulse-Local-N3-v4",
             "message": "Dispositivo offline — Análise gerada pela IA Local N3.",
             "response_text": local_text,
         }
 
     system_instruction = (
-        "Você é o assistente de IA embarcado no 'AegisPulse IT Toolkit — Diagnóstico • Automação • Inteligência', "
-        "desenvolvido pelo especialista de TI Adriano Barboza (WhatsApp +55 61 98515-8434). Analise os dados reais "
-        "coletados da máquina abaixo (incluindo temperaturas de CPU/GPU e perfil PC Gamer) sem inventar métricas. "
+        "Você é o assistente especialista N3 embarcado no 'AegisPulse IT Toolkit v4.0 — Diagnóstico • Automação • Inteligência', "
+        "desenvolvido por Adriano Barboza (WhatsApp +55 61 98515-8434). Analise os dados reais coletados abaixo "
+        "(incluindo o dossiê forense de discos, atributos SMART, TBW, horas ligadas, classificação de risco e falhas). "
+        "REGRAS ESTRITAS: (1) Jamais invente métricas ausentes; (2) Diferencie falhas físicas de mídia, falhas de cabo/conexão (como erro CRC) "
+        "e corrupção lógica; (3) Nunca prometa uma data exata de falha nem garanta 100% de recuperação de dados; "
+        "(4) Ordene o plano de ação do menor para o maior risco aos dados (priorizando imagem/clonagem antes de reparos como CHKDSK). "
         "Separe sua resposta em:\n"
-        "### 1. DIAGNÓSTICO TÉCNICO N3 (Para o Técnico Adriano Barboza)\n"
-        "### 2. PARECER PARA O CLIENTE (Linguagem clara, honesta e sem alarmismo)"
+        "### 1. DIAGNÓSTICO TÉCNICO N3 & AUDITORIA DE ARMAZENAMENTO (Para o Técnico Adriano Barboza)\n"
+        "### 2. HIPÓTESES TÉCNICAS, TESTES RECOMENDADOS E PLANO DE AÇÃO ORDENADO POR RISCO\n"
+        "### 3. PARECER PARA O CLIENTE (Linguagem clara, honesta e sem alarmismo)"
     )
 
     if user_prompt.strip():
@@ -326,7 +384,7 @@ def query_gemini_ai(
         prompt_text = (
             f"{system_instruction}\n\n"
             f"DADOS DO EQUIPAMENTO (JSON):\n{json.dumps(sanitized_context, ensure_ascii=False, indent=2)}\n\n"
-            "Gere o diagnóstico técnico completo e a mensagem para o cliente."
+            "Gere o diagnóstico técnico completo, o plano de ação ordenado por risco e a mensagem para o cliente."
         )
 
     # 3. Motor Grok / Groq Cloud AI
@@ -358,14 +416,14 @@ def query_gemini_ai(
         return {
             "online": True,
             "success": True,
-            "model_used": "AegisPulse-Local-N3",
+            "model_used": "AegisPulse-Local-N3-v4",
             "message": "Chave Gemini não informada — Diagnóstico gerado pela IA Local N3.",
             "response_text": local_text,
         }
 
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2048},
+        "generationConfig": {"temperature": 0.25, "maxOutputTokens": 2500},
     }
 
     models_to_try = [m for m in FALLBACK_MODELS]
