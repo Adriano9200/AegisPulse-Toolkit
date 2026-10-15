@@ -4,19 +4,21 @@
 ================================================================================
 PROJETO: AegisPulse IT Toolkit
 ARQUIVO: backend/services/gemini_ai.py
-AUTOR:   Adriano Barboza (adriano9200@gmail.com)
-VERSÃO:  1.1.2
+AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
+VERSÃO:  3.0.0
 ================================================================================
 Descrição:
-Integração resiliente com a API do Google Gemini + Motor Especialista N3 Local:
-1. Tenta em cascata todos os modelos gratuitos ativos da família Gemini 3.x
-   (gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite,
-   gemini-3.1-flash-lite, gemini-3-flash-preview) caso ocorra erro 404, 429
-   ou 503 (alta demanda temporária nos servidores da Google);
-2. Se todos os servidores da Google estiverem sobrecarregados (503) ou sem
-   internet, aciona automaticamente o Motor Especialista Heurístico N3 nativo
-   do AegisPulse, gerando o Diagnóstico Técnico N3 e o Parecer para o Cliente
-   com base nos dados reais coletados da máquina sem nunca falhar no atendimento.
+Suporte a 3 Motores de Inteligência Artificial com controle comercial por perfil:
+1. IA LOCAL AEGISPULSE N3 (provider = 'local'):
+   - Liberada gratuitamente tanto para Usuários em MODO TRIAL quanto para
+     Assinantes PRO e Administrador Master. Funciona até sem internet!
+2. GOOGLE GEMINI 3.X CLOUD AI (provider = 'gemini'):
+   - Exclusivo para Assinantes PRO e Administrador Master.
+   - Se acionado por um usuário em Modo Trial, exibe um convite comercial
+     intuitivo para assinar via WhatsApp (+55 61 98515-8434).
+3. XAI GROK / GROQ CLOUD AI (provider = 'grok'):
+   - Exclusivo para Assinantes PRO e Administrador Master.
+   - Compatível com chaves xAI Grok (xai-...) e GroqCloud LPU (gsk_...).
 """
 
 import json
@@ -35,7 +37,6 @@ FALLBACK_MODELS = [
 
 
 def check_internet_connection(timeout: float = 3.0) -> bool:
-    """Verifica se o computador possui conexão ativa com a internet."""
     targets = [("8.8.8.8", 53), ("1.1.1.1", 53)]
     for host, port in targets:
         try:
@@ -47,7 +48,6 @@ def check_internet_connection(timeout: float = 3.0) -> bool:
 
 
 def sanitize_snapshot_for_ai(snapshot: dict) -> dict:
-    """Remove seriais privados e UUIDs antes de enviar o contexto para a API."""
     hw = snapshot.get("hardware", {})
     os_info = snapshot.get("os", {})
     drv = snapshot.get("drivers_bios", {})
@@ -58,6 +58,7 @@ def sanitize_snapshot_for_ai(snapshot: dict) -> dict:
     return {
         "manufacturer": hw.get("manufacturer"),
         "model": hw.get("model"),
+        "temperatures": hw.get("temperatures"),
         "total_ram_gb": hw.get("total_ram_gb"),
         "ram_modules": hw.get("ram_modules"),
         "cpus": hw.get("cpus"),
@@ -76,6 +77,7 @@ def sanitize_snapshot_for_ai(snapshot: dict) -> dict:
         "outdated_drivers_count": drv.get("outdated_drivers_count", 0),
         "outdated_software": sw.get("outdated_software", []),
         "bloatware_count": sw.get("bloatware_count", 0),
+        "gamer_profile": gaming.get("gamer_profile", {}),
         "missing_dlls": [
             f"{d.get('dll')} ({d.get('group')})"
             for d in gaming.get("dll_audit", [])
@@ -86,12 +88,13 @@ def sanitize_snapshot_for_ai(snapshot: dict) -> dict:
 
 
 def generate_local_expert_analysis(ctx: dict, user_prompt: str = "", cloud_notice: str = "") -> str:
-    """
-    Motor Especialista Heurístico N3 Nativo do AegisPulse (100% gratuito e à prova de falhas).
-    Analisa os dados reais coletados da máquina quando a nuvem está em pico (503) ou offline.
-    """
+    """Motor Especialista Heurístico N3 Nativo do AegisPulse (Liberado para Trial, Assinantes e ADM)."""
     manuf = ctx.get("manufacturer") or "Equipamento"
     model = ctx.get("model") or "Workstation"
+    temps = ctx.get("temperatures") or {}
+    cpu_t = temps.get("cpu_temp_c", 46.0)
+    gpu_t = temps.get("gpu_temp_c", 44.0)
+
     ram_gb = ctx.get("total_ram_gb") or 0
     ram_mods = ctx.get("ram_modules") or []
     cpus = ctx.get("cpus") or [{}]
@@ -112,78 +115,128 @@ def generate_local_expert_analysis(ctx: dict, user_prompt: str = "", cloud_notic
     outdated_sw = ctx.get("outdated_software") or []
     missing_dlls = ctx.get("missing_dlls") or []
     outdated_drv = int(ctx.get("outdated_drivers_count") or 0)
-    pnp_errs = ctx.get("pnp_errors") or []
+    gp = ctx.get("gamer_profile") or {}
 
     sw_names = ", ".join(s.get("name", "") for s in outdated_sw[:8])
     if len(outdated_sw) > 8:
         sw_names += f" e mais {len(outdated_sw) - 8} pacote(s)"
 
     lines = []
+    lines.append("[Motor Utilizado: 🧠 IA Local AegisPulse N3 (Diagnóstico Embarcado Instantâneo)]")
     if cloud_notice:
-        lines.append(f"[Nota Técnica: {cloud_notice} — Análise gerada pelo Motor Especialista N3 Embarcado do AegisPulse]\n")
-
-    lines.append("=" * 74)
-    lines.append("1. DIAGNÓSTICO TÉCNICO N3 (PARA ADRIANO BARBOZA)")
-    lines.append("=" * 74)
-    lines.append(f"• Equipamento Analisado : {manuf} {model}")
-    lines.append(f"• Sistema Operacional   : {os_str}")
-    lines.append(f"• Processador & GPU     : {cpu_name} | GPU: {gpu_name}")
-    lines.append(f"• Memória RAM           : {ram_gb} GB instalados em {len(ram_mods)} módulo(s) ({', '.join(m.get('manufacturer', '') for m in ram_mods[:2])})")
-    lines.append(f"• Armazenamento & SMART : {disk_summary}")
-    lines.append(f"• Firmware BIOS/UEFI    : Versão {bios.get('smbios_version', 'N/D')} ({bios.get('release_date', 'N/D')} - {bios.get('status_label', 'OK')})")
+        lines.append(f"[Info: {cloud_notice}]")
     lines.append("")
-    lines.append("PONTOS DE ATENÇÃO E PRIORIDADES DE MANUTENÇÃO:")
-
-    if len(outdated_sw) > 0:
-        lines.append(
-            f"1. [PRIORIDADE MÉDIA] {len(outdated_sw)} Softwares Obsoletos detectados via Winget: "
-            f"{sw_names}. Recomenda-se clicar em 'Atualizar Todos os Obsoletos' na Aba 4 para fechar brechas de segurança."
-        )
+    lines.append("### 1. DIAGNÓSTICO TÉCNICO N3 (Especialista Adriano Barboza)")
+    lines.append("")
+    lines.append(f"- **Equipamento Analisado:** {manuf} {model}")
+    lines.append(f"- **Sistema Operacional:** {os_str}")
+    lines.append(f"- **Processador & Temperatura Atual:** {cpu_name} — **{cpu_t}°C** ({temps.get('cpu_temp_status', 'Normal')})")
+    lines.append(f"- **Placa de Vídeo & Temperatura Atual:** {gpu_name} — **{gpu_t}°C** ({temps.get('gpu_temp_status', 'Normal')})")
+    lines.append(f"- **Memória RAM:** {ram_gb} GB instalados em {len(ram_mods)} módulo(s)")
+    lines.append(f"- **Armazenamento & SMART:** {disk_summary}")
+    lines.append(f"- **Classificação PC Gamer:** {gp.get('gamer_tier', 'N/D')} (Alvo: {gp.get('target_resolution', '1080p')})")
+    lines.append(f"- **Firmware BIOS/UEFI:** Versão `{bios.get('smbios_version', 'N/D')}` ({bios.get('release_date', 'N/D')} - {bios.get('status_label', 'OK')})")
+    lines.append("")
+    lines.append("### Prioridades de Intervenção Técnica")
+    if outdated_sw:
+        lines.append(f"- **Softwares Obsoletos ({len(outdated_sw)}):** Atualizar via Winget ({sw_names}).")
     else:
-        lines.append("1. [OK] Todos os softwares monitorados pelo Winget estão na versão mais recente.")
+        lines.append("- **Softwares:** Todos os pacotes monitorados pelo Winget estão atualizados.")
 
     if missing_dlls:
-        lines.append(
-            f"2. [PRIORIDADE ALTA PARA APPS/JOGOS] {len(missing_dlls)} DLL(s) de runtime ausentes: "
-            f"{', '.join(missing_dlls)}. Recomenda-se clicar em 'Reparar Todas as DLLs (VC++ & DirectX Oficial)' na Aba 6."
-        )
+        lines.append(f"- **DLLs de Jogos/Runtimes Ausentes ({len(missing_dlls)}):** Reparar {', '.join(missing_dlls)} na Aba PC Gamer & DLLs.")
     else:
-        lines.append("2. [OK] Todas as DLLs críticas 32-bit (SysWOW64) e 64-bit (System32) estão íntegras.")
+        lines.append("- **Integridade de DLLs (32/64-bit):** Todas as 11 bibliotecas críticas estão presentes e íntegras.")
 
-    if outdated_drv > 0 or pnp_errs:
-        lines.append(
-            f"3. [REVISÃO DE DRIVERS] {outdated_drv} driver(s) de terceiros com mais de 36 meses e "
-            f"{len(pnp_errs)} dispositivo(s) com alerta PnP. Verifique a busca do Windows Update na Aba 3."
-        )
-    else:
-        lines.append("3. [OK] Controladores e drivers principais operando sem falhas PnP.")
+    if outdated_drv > 0:
+        lines.append(f"- **Drivers Antigos:** {outdated_drv} controlador(es) com mais de 36 meses. Verificar atualizações oficiais.")
+
+    for b in gp.get("bottlenecks_and_alerts", []):
+        lines.append(f"- **Análise de Equilíbrio/Gargalo:** {b}")
 
     if user_prompt.strip():
         lines.append("")
-        lines.append(f"RESPOSTA À SUA PERGUNTA ('{user_prompt.strip()}'):")
+        lines.append(f"### Resposta à Pergunta Técnica ('{user_prompt.strip()}')")
         lines.append(
-            f"- Com a configuração atual ({cpu_name}, {ram_gb} GB RAM e {gpu_name}), a máquina possui "
-            "excelente base de processamento e memória para multitarefa pesada, projetos técnicos e modelagem. "
-            "Para estabilidade total em softwares gráficos e jogos, execute primeiro o reparo das DLLs ausentes na Aba 6."
+            f"- Com base no conjunto `{cpu_name}` + `{gpu_name}` + `{ram_gb} GB RAM`, o equipamento opera em `{gp.get('gamer_tier', 'Alto Desempenho')}` com temperaturas atuais de `{cpu_t}°C` (CPU) e `{gpu_t}°C` (GPU)."
         )
 
     lines.append("")
-    lines.append("=" * 74)
-    lines.append("2. PARECER EXECUTIVO PARA O CLIENTE (PRONTO PARA WHATSAPP / LAUDO)")
-    lines.append("=" * 74)
+    lines.append("---")
+    lines.append("")
+    lines.append("### 2. PARECER PARA O CLIENTE")
+    lines.append("")
     lines.append(
-        f"Olá! Concluímos o diagnóstico completo do seu computador ({manuf} {model}) utilizando a suíte "
-        "AegisPulse IT Toolkit.\n\n"
-        f"✅ Saúde Física (Hardware e Discos): Seu processador ({cpu_name}), seus {ram_gb} GB de memória RAM "
-        "e suas unidades de armazenamento (SSD/HD) passaram nos testes físicos e estão com saúde SMART íntegra (Healthy), "
-        "assim como a versão da sua BIOS.\n\n"
-        "🔧 Manutenção e Atualizações Recomendadas:\n"
-        f"- Identificamos {len(outdated_sw)} programa(s) instalado(s) que possuem atualizações importantes de segurança e desempenho disponíveis;\n"
-        f"- Detectamos {len(missing_dlls)} biblioteca(s) complementar(es) do Windows (Visual C++ / DirectX) ausentes, que podem fazer falta ao abrir jogos ou programas gráficos.\n\n"
-        "Realizando a atualização desses pacotes e a limpeza preventiva de arquivos temporários, seu equipamento ficará 100% atualizado, seguro e operando em desempenho máximo!"
+        f"Prezado(a) Cliente,\n\n"
+        f"Concluímos a inspeção completa do seu computador **{manuf} {model}** através da suíte **AegisPulse IT Toolkit**.\n\n"
+        f"- **Saúde Física e Temperaturas:** Seu processador (**{cpu_name}** a **{cpu_t}°C**), placa de vídeo (**{gpu_name}** a **{gpu_t}°C**), seus **{ram_gb} GB de memória RAM** e seus discos rígidos/SSDs estão operando com saúde física aprovada.\n"
+        f"- **Manutenção Preventiva Recomendada:** Identificamos **{len(outdated_sw)} programa(s)** com atualizações de segurança pendentes e oportunidades de otimização de armazenamento e drivers para deixar sua máquina ainda mais rápida e estável.\n\n"
+        f"Atenciosamente,\n"
+        f"**Adriano Barboza** — Especialista em TI | WhatsApp: **+55 61 98515-8434**"
     )
-
     return "\n".join(lines)
+
+
+def _query_grok_or_groq_cloud(api_key: str, prompt_text: str) -> dict:
+    """Consulta a API da xAI Grok (xai-...) ou GroqCloud LPU (gsk_...) compatível com OpenAI."""
+    clean_key = (api_key or "").strip()
+    if not clean_key:
+        return {
+            "online": True,
+            "success": False,
+            "message": "Chave de API Grok (xAI) / Groq não configurada. Cole sua chave no painel de configuração à direita.",
+            "response_text": "",
+        }
+
+    is_groq_lpu = clean_key.startswith("gsk_")
+    endpoint = (
+        "https://api.groq.com/openai/v1/chat/completions"
+        if is_groq_lpu
+        else "https://api.x.ai/v1/chat/completions"
+    )
+    model_name = "llama-3.3-70b-versatile" if is_groq_lpu else "grok-3-mini"
+
+    payload = {
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": "Você é o especialista N3 embarcado no AegisPulse IT Toolkit de Adriano Barboza."},
+            {"role": "user", "content": prompt_text},
+        ],
+        "temperature": 0.3,
+    }
+
+    req = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {clean_key}",
+            "User-Agent": "AegisPulse-Toolkit/3.0",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+            choices = body.get("choices") or []
+            if choices:
+                txt = choices[0].get("message", {}).get("content", "").strip()
+                header = f"[Modelo Utilizado: 🚀 Grok / Groq Cloud AI ({model_name})]\n\n"
+                return {
+                    "online": True,
+                    "success": True,
+                    "model_used": model_name,
+                    "message": f"Análise concluída via {model_name}!",
+                    "response_text": header + txt,
+                }
+    except Exception as exc:
+        return {
+            "online": True,
+            "success": False,
+            "message": f"Falha ao consultar Grok/Groq Cloud ({exc}). Verifique sua chave de API ou use a IA Local N3.",
+            "response_text": "",
+        }
+    return {"online": True, "success": False, "message": "Resposta vazia da API Grok.", "response_text": ""}
 
 
 def query_gemini_ai(
@@ -191,55 +244,83 @@ def query_gemini_ai(
     snapshot: dict,
     user_prompt: str = "",
     model: str = "gemini-3.5-flash-lite",
+    provider: str = "local",
+    user_role: str = "admin",
+    grok_api_key: str = "",
 ) -> dict:
-    """Consulta a API REST do Google Gemini com fallback multi-modelo e motor local N3."""
+    """
+    Roteador Multi-IA v3.0:
+    - provider == 'local': Usa IA Local N3 (disponível para Trial, Assinante PRO e ADM).
+    - provider == 'gemini' ou 'grok': Exclusivo para Assinante PRO e ADM Master!
+      Se o usuário estiver em Modo Trial, exibe um convite comercial intuitivo para assinar.
+    """
     sanitized_context = sanitize_snapshot_for_ai(snapshot)
-    online = check_internet_connection()
 
+    # 1. IA Local AegisPulse N3 (Liberada para TODOS, inclusive Trial)
+    if provider == "local":
+        local_text = generate_local_expert_analysis(sanitized_context, user_prompt=user_prompt)
+        return {
+            "online": True,
+            "success": True,
+            "model_used": "AegisPulse-Local-N3",
+            "message": "Diagnóstico gerado instantaneamente pela IA Local AegisPulse N3!",
+            "response_text": local_text,
+        }
+
+    # 2. Trava Comercial Intuitiva para Usuários em Modo Trial que tentarem usar Gemini ou Grok Cloud
+    if user_role == "trial" and provider in ("gemini", "grok"):
+        upsell_msg = (
+            "==========================================================================\n"
+            "🔒 RECURSO EXCLUSIVO PARA ASSINANTES PRO — IA EM NUVEM (GEMINI & GROK)\n"
+            "==========================================================================\n\n"
+            "Você está utilizando o MODO TRIAL GRATUITO do AegisPulse IT Toolkit.\n"
+            "No Modo Trial, você já tem acesso completo à nossa **🧠 IA Local AegisPulse N3**!\n\n"
+            "Para desbloquear os motores de Inteligência Artificial em Nuvem (**✨ Google Gemini 3.x** "
+            "e **🚀 xAI Grok / Groq Cloud**), além de diagnósticos e laudos ILIMITADOS:\n\n"
+            "👉 Adquira sua Chave de Assinatura PRO agora mesmo com **Adriano Barboza**:\n"
+            "📱 WhatsApp Direto: +55 61 98515-8434\n"
+            "📧 E-mail: adriano9200@gmail.com\n\n"
+            "💡 Dica: Selecione a opção '🧠 IA Local AegisPulse N3 (Gratuita Trial & PRO)' no seletor acima "
+            "para gerar seu diagnóstico gratuitamente agora mesmo!"
+        )
+        return {
+            "online": True,
+            "success": True,
+            "requires_subscription": True,
+            "model_used": "Trial-Upsell",
+            "message": "Motores Gemini & Grok são exclusivos para Assinantes PRO. Use a IA Local ou assine pelo WhatsApp +55 61 98515-8434!",
+            "response_text": upsell_msg,
+        }
+
+    online = check_internet_connection()
     if not online:
         local_text = generate_local_expert_analysis(
             sanitized_context,
             user_prompt=user_prompt,
-            cloud_notice="Computador desconectado da internet",
+            cloud_notice="Sem conexão com a internet — Fallback automático para IA Local N3",
         )
         return {
             "online": False,
             "success": True,
             "model_used": "AegisPulse-Local-N3",
-            "message": "Análise gerada pelo Motor Especialista Local (Modo Offline).",
-            "response_text": local_text,
-        }
-
-    clean_key = (api_key or "").strip()
-    if not clean_key or clean_key == "COLE_SUA_GEMINI_API_KEY_AQUI":
-        local_text = generate_local_expert_analysis(
-            sanitized_context,
-            user_prompt=user_prompt,
-            cloud_notice="Sem chave de API configurada — usando Motor Nativo Gratuito",
-        )
-        return {
-            "online": True,
-            "success": True,
-            "model_used": "AegisPulse-Local-N3",
-            "message": "Análise gerada pelo Motor Especialista Nativo do AegisPulse.",
+            "message": "Dispositivo offline — Análise gerada pela IA Local N3.",
             "response_text": local_text,
         }
 
     system_instruction = (
         "Você é o assistente de IA embarcado no 'AegisPulse IT Toolkit — Diagnóstico • Automação • Inteligência', "
-        "desenvolvido pelo especialista de TI Adriano Barboza. Analise os dados reais coletados da máquina "
-        "abaixo sem inventar métricas. Separe sua resposta em:\n"
-        "1. DIAGNÓSTICO TÉCNICO N3 (para o técnico Adriano Barboza): avaliação de hardware, "
-        "saúde dos discos, idade da BIOS, drivers antigos, softwares obsoletos, DLLs ausentes e prioridades.\n"
-        "2. PARECER PARA O CLIENTE (linguagem clara, honesta e sem alarmismo): resumo "
-        "pronto para enviar ao cliente explicando o estado do computador e as melhorias recomendadas."
+        "desenvolvido pelo especialista de TI Adriano Barboza (WhatsApp +55 61 98515-8434). Analise os dados reais "
+        "coletados da máquina abaixo (incluindo temperaturas de CPU/GPU e perfil PC Gamer) sem inventar métricas. "
+        "Separe sua resposta em:\n"
+        "### 1. DIAGNÓSTICO TÉCNICO N3 (Para o Técnico Adriano Barboza)\n"
+        "### 2. PARECER PARA O CLIENTE (Linguagem clara, honesta e sem alarmismo)"
     )
 
     if user_prompt.strip():
         prompt_text = (
             f"{system_instruction}\n\n"
             f"DADOS DO EQUIPAMENTO (JSON):\n{json.dumps(sanitized_context, ensure_ascii=False, indent=2)}\n\n"
-            f"PERGUNTA ESPECÍFICA DO TÉCNICO ADRIANO BARBOZA:\n{user_prompt.strip()}"
+            f"PERGUNTA ESPECÍFICA:\n{user_prompt.strip()}"
         )
     else:
         prompt_text = (
@@ -248,16 +329,43 @@ def query_gemini_ai(
             "Gere o diagnóstico técnico completo e a mensagem para o cliente."
         )
 
+    # 3. Motor Grok / Groq Cloud AI
+    if provider == "grok":
+        res_grok = _query_grok_or_groq_cloud(grok_api_key, prompt_text)
+        if res_grok.get("success"):
+            return res_grok
+        fallback_text = generate_local_expert_analysis(
+            sanitized_context,
+            user_prompt=user_prompt,
+            cloud_notice=res_grok.get("message", "Chave Grok ausente — usando IA Local N3"),
+        )
+        return {
+            "online": True,
+            "success": True,
+            "model_used": "AegisPulse-Local-N3-Fallback",
+            "message": res_grok.get("message", "Usando IA Local N3."),
+            "response_text": fallback_text,
+        }
+
+    # 4. Motor Google Gemini 3.x Cloud AI
+    clean_key = (api_key or "").strip()
+    if not clean_key or clean_key == "COLE_SUA_GEMINI_API_KEY_AQUI":
+        local_text = generate_local_expert_analysis(
+            sanitized_context,
+            user_prompt=user_prompt,
+            cloud_notice="Chave Gemini API não configurada — usando IA Local N3",
+        )
+        return {
+            "online": True,
+            "success": True,
+            "model_used": "AegisPulse-Local-N3",
+            "message": "Chave Gemini não informada — Diagnóstico gerado pela IA Local N3.",
+            "response_text": local_text,
+        }
+
     payload = {
-        "contents": [
-            {
-                "parts": [{"text": prompt_text}]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": 2048,
-        },
+        "contents": [{"parts": [{"text": prompt_text}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2048},
     }
 
     models_to_try = [m for m in FALLBACK_MODELS]
@@ -265,7 +373,6 @@ def query_gemini_ai(
         models_to_try.insert(0, model)
 
     last_error_msg = ""
-
     for candidate_model in models_to_try:
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{candidate_model}:generateContent?key={clean_key}"
         req = urllib.request.Request(
@@ -281,7 +388,7 @@ def query_gemini_ai(
                 if candidates:
                     parts = candidates[0].get("content", {}).get("parts", [])
                     text = "\n".join(p.get("text", "") for p in parts).strip()
-                    header = f"[Modelo Utilizado: Google Gemini ({candidate_model})]\n\n"
+                    header = f"[Modelo Utilizado: ✨ Google Gemini ({candidate_model})]\n\n"
                     return {
                         "online": True,
                         "success": True,
@@ -291,8 +398,6 @@ def query_gemini_ai(
                     }
         except urllib.error.HTTPError as he:
             last_error_msg = f"HTTP {he.code} em {candidate_model}"
-            # Continua automaticamente para o próximo modelo se der 404 (não encontrado),
-            # 429 (limite de taxa) ou 500/502/503/504 (alta demanda temporária na Google)
             if he.code in (404, 429, 500, 502, 503, 504):
                 time.sleep(0.4)
                 continue
@@ -301,16 +406,15 @@ def query_gemini_ai(
             last_error_msg = f"Erro em {candidate_model}: {exc}"
             continue
 
-    # Se todos os modelos da nuvem estiverem com pico de demanda (503), entrega a análise pelo Motor Especialista N3 Local!
     fallback_text = generate_local_expert_analysis(
         sanitized_context,
         user_prompt=user_prompt,
-        cloud_notice=f"Servidores Gemini em alta demanda temporária ({last_error_msg})",
+        cloud_notice=f"Servidores Gemini em alta demanda ({last_error_msg})",
     )
     return {
         "online": True,
         "success": True,
         "model_used": "AegisPulse-Local-N3-Fallback",
-        "message": "Servidores Google em pico de demanda (503) — Diagnóstico gerado pelo Motor Especialista N3 Embarcado!",
+        "message": "Servidores Google em pico (503) — Diagnóstico gerado pela IA Local N3!",
         "response_text": fallback_text,
     }

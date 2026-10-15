@@ -3,9 +3,9 @@
 """
 ================================================================================
 PROJETO: AegisPulse IT Toolkit
-ARQUIVO: backend/server.py (Servidor HTTP/REST API Modular)
-AUTOR:   Adriano Barboza (adriano9200@gmail.com)
-VERSÃO:  1.1.0
+ARQUIVO: backend/server.py (Servidor HTTP/REST API v3.0 com CRM SQLite & Multi-IA)
+AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
+VERSÃO:  3.0.0
 ================================================================================
 """
 
@@ -14,14 +14,20 @@ import mimetypes
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 from backend.auth import (
-    verify_operator_pin,
-    is_authorized,
+    login_admin,
+    login_subscriber,
+    login_trial,
+    get_session_info,
+    consume_trial_scan,
+    generate_subscription_key,
     load_config,
     save_config,
     hash_pin,
+    AUTHOR_WHATSAPP,
+    AUTHOR_WHATSAPP_URL,
 )
 from backend.collectors.hardware import collect_hardware_info
 from backend.collectors.os_info import collect_os_info
@@ -44,6 +50,13 @@ from backend.services.network_tools import (
 from backend.services.gaming_dll import (
     audit_gaming_and_dlls,
     run_gaming_optimization,
+)
+from backend.services.compatibility import analyze_hardware_compatibility
+from backend.services.admin_crm import (
+    FAIR_PRICING_CATALOG,
+    list_crm_clients,
+    delete_crm_client,
+    save_client_and_generate_report,
 )
 from backend.services.gemini_ai import check_internet_connection, query_gemini_ai
 from backend.services.html_reporter import generate_html_report
@@ -81,31 +94,50 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
     def _get_token(self) -> str | None:
         return self.headers.get("X-Operator-Token")
 
-    def _require_auth(self) -> bool:
+    def _require_auth(self, require_admin: bool = False) -> dict | None:
         base_dir = SESSION_STATE["base_dir"]
-        if not is_authorized(base_dir, self._get_token()):
+        sess = get_session_info(base_dir, self._get_token())
+        if not sess:
             self._send_json(
                 {
                     "error": "unauthorized",
-                    "message": "Acesso restrito ao autor/operador autorizado (Adriano Barboza). Insira seu PIN de Técnico.",
+                    "message": f"Sessão não iniciada. Escolha Modo Trial (4 Análises Grátis), Assinatura PRO ou fale com Adriano Barboza no WhatsApp {AUTHOR_WHATSAPP}.",
+                    "whatsapp": AUTHOR_WHATSAPP,
+                    "whatsapp_url": AUTHOR_WHATSAPP_URL,
                 },
                 status=401,
             )
-            return False
-        return True
+            return None
+        if require_admin and sess.get("role") != "admin":
+            self._send_json(
+                {
+                    "error": "forbidden",
+                    "message": "Acesso exclusivo ao Administrador Master (Adriano Barboza).",
+                },
+                status=403,
+            )
+            return None
+        return sess
 
     def do_GET(self):
         parsed = urlparse(self.path)
         route = parsed.path
+        qs = parse_qs(parsed.query)
         base_dir = SESSION_STATE["base_dir"]
 
         if route == "/api/auth/status":
             cfg = load_config(base_dir)
-            authorized = is_authorized(base_dir, self._get_token())
+            sess = get_session_info(base_dir, self._get_token())
             self._send_json({
-                "require_pin": bool(cfg.get("require_operator_pin", True)),
-                "authorized": authorized,
+                "require_pin": True,
+                "authorized": sess is not None,
+                "session": sess,
+                "trial_used": int(cfg.get("trial_scans_used", 0)),
+                "trial_limit": int(cfg.get("trial_limit", 4)),
+                "activated_license_key": cfg.get("activated_license_key", ""),
                 "author": "Adriano Barboza",
+                "whatsapp": AUTHOR_WHATSAPP,
+                "whatsapp_url": AUTHOR_WHATSAPP_URL,
                 "online": check_internet_connection(),
                 "has_gemini_key": bool(
                     cfg.get("gemini_api_key")
@@ -115,30 +147,67 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             return
 
         if route == "/api/scan/full":
-            if not self._require_auth():
+            sess = self._require_auth()
+            if not sess:
                 return
+            allowed, msg = consume_trial_scan(base_dir, self._get_token())
+            if not allowed:
+                self._send_json(
+                    {
+                        "error": "trial_exhausted",
+                        "message": msg,
+                        "whatsapp": AUTHOR_WHATSAPP,
+                        "whatsapp_url": AUTHOR_WHATSAPP_URL,
+                        "session": get_session_info(base_dir, self._get_token()),
+                    },
+                    status=402,
+                )
+                return
+
             hw = collect_hardware_info()
             os_data = collect_os_info()
             drv_bios = collect_drivers_and_bios()
             sw = collect_installed_software()
             net = collect_network_diagnostics()
-            gaming = audit_gaming_and_dlls()
+            gaming = audit_gaming_and_dlls(hardware=hw)
+            compat = analyze_hardware_compatibility(hardware=hw, os_info=os_data)
 
+            updated_sess = get_session_info(base_dir, self._get_token())
             snapshot = {
                 "collected_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
                 "author": "Adriano Barboza",
+                "whatsapp": AUTHOR_WHATSAPP,
+                "whatsapp_url": AUTHOR_WHATSAPP_URL,
                 "online": check_internet_connection(),
+                "session": updated_sess,
                 "hardware": hw,
                 "os": os_data,
                 "drivers_bios": drv_bios,
                 "software": sw,
                 "network": net,
                 "gaming": gaming,
+                "compatibility": compat,
+                "pricing_catalog": FAIR_PRICING_CATALOG if updated_sess.get("role") == "admin" else [],
                 "action_logs": SESSION_STATE["action_logs"],
             }
             SESSION_STATE["last_snapshot"] = snapshot
-            log_action("Diagnóstico Completo v1.1", f"Varredura executada em {hw.get('hostname')}")
+            log_action(
+                f"Diagnóstico v3.0 ({updated_sess.get('role', 'user').upper()})",
+                f"Varredura executada em {hw.get('hostname')} ({msg})",
+            )
             self._send_json(snapshot)
+            return
+
+        if route == "/api/admin/crm/list":
+            if not self._require_auth(require_admin=True):
+                return
+            q = (qs.get("q") or [""])[0]
+            clients = list_crm_clients(base_dir, search_query=q)
+            self._send_json({
+                "success": True,
+                "clients": clients,
+                "pricing_catalog": FAIR_PRICING_CATALOG,
+            })
             return
 
         if route == "/api/logs":
@@ -190,16 +259,89 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 body = {}
 
         if route == "/api/auth/login":
-            pin = str(body.get("pin", ""))
-            token = verify_operator_pin(base_dir, pin)
-            if token:
-                log_action("Autenticação de Operador", "Sessão desbloqueada pelo operador autorizado.")
-                self._send_json({"success": True, "token": token})
-            else:
-                self._send_json({"success": False, "message": "PIN de Operador incorreto."}, status=403)
+            mode = str(body.get("mode", "admin"))
+            if mode == "admin":
+                pin = str(body.get("pin", ""))
+                res = login_admin(base_dir, pin)
+                if res.get("success"):
+                    log_action("Login Master ADM", "Sessão Master desbloqueada por Adriano Barboza.")
+                    self._send_json(res)
+                else:
+                    self._send_json(res, status=403)
+                return
+
+            if mode == "subscriber":
+                lkey = str(body.get("license_key", ""))
+                res = login_subscriber(base_dir, lkey)
+                if res.get("success"):
+                    log_action("Ativação de Assinatura PRO", res.get("message", ""))
+                    self._send_json(res)
+                else:
+                    self._send_json(res, status=403)
+                return
+
+            if mode == "trial":
+                res = login_trial(base_dir)
+                if res.get("success"):
+                    log_action("Início de Sessão Trial", res.get("role_label", ""))
+                    self._send_json(res)
+                else:
+                    self._send_json(res, status=402)
+                return
+
+        if route == "/api/admin/generate-key":
+            if not self._require_auth(require_admin=True):
+                return
+            client_name = str(body.get("client_name", "Cliente PRO"))
+            days = int(body.get("days_valid", 365))
+            key_data = generate_subscription_key(client_name=client_name, days_valid=days)
+            log_action("ADM Keygen", f"Chave gerada para {client_name} ({days} dias): {key_data['license_key']}")
+            key_data["success"] = True
+            key_data["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(key_data)
             return
 
-        if not self._require_auth():
+        if route == "/api/admin/reset-trial":
+            if not self._require_auth(require_admin=True):
+                return
+            save_config(base_dir, {"trial_scans_used": 0})
+            log_action("ADM Reset Trial", "Contador de análises Trial zerado (0/4) pelo Administrador.")
+            self._send_json({
+                "success": True,
+                "message": "Contador Trial desta máquina foi zerado (0 de 4 análises usadas).",
+                "action_logs": SESSION_STATE["action_logs"],
+            })
+            return
+
+        if route == "/api/admin/crm/save-and-quote":
+            if not self._require_auth(require_admin=True):
+                return
+            snapshot = SESSION_STATE.get("last_snapshot") or {
+                "hardware": collect_hardware_info(),
+                "os": collect_os_info(),
+            }
+            res = save_client_and_generate_report(base_dir, snapshot, body)
+            log_action("CRM SQLite & Orçamento Cliente", res.get("message", ""))
+            res["clients"] = list_crm_clients(base_dir)
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/admin/crm/delete":
+            if not self._require_auth(require_admin=True):
+                return
+            cid = int(body.get("client_id", 0))
+            delete_crm_client(base_dir, cid)
+            log_action("CRM SQLite", f"Registro de cliente #{cid} removido.")
+            self._send_json({
+                "success": True,
+                "clients": list_crm_clients(base_dir),
+                "action_logs": SESSION_STATE["action_logs"],
+            })
+            return
+
+        sess = self._require_auth()
+        if not sess:
             return
 
         if route == "/api/software/winget":
@@ -264,21 +406,41 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
 
         if route == "/api/gemini/analyze":
             cfg = load_config(base_dir)
+            provider = str(body.get("provider") or "local")
             api_key = str(body.get("api_key") or cfg.get("gemini_api_key") or "")
+            grok_key = str(body.get("grok_api_key") or cfg.get("grok_api_key") or "")
             prompt = str(body.get("prompt") or "")
-            if body.get("api_key"):
-                save_config(base_dir, {"gemini_api_key": api_key.strip()})
 
-            snapshot = SESSION_STATE.get("last_snapshot") or {
-                "hardware": collect_hardware_info(),
-                "os": collect_os_info(),
-                "drivers_bios": collect_drivers_and_bios(),
-                "software": collect_installed_software(),
-            }
-            res = query_gemini_ai(api_key=api_key, snapshot=snapshot, user_prompt=prompt)
-            if res.get("success"):
+            updates = {}
+            if body.get("api_key"):
+                updates["gemini_api_key"] = api_key.strip()
+            if body.get("grok_api_key"):
+                updates["grok_api_key"] = grok_key.strip()
+            if updates:
+                save_config(base_dir, updates)
+
+            snapshot = SESSION_STATE.get("last_snapshot")
+            if not snapshot:
+                hw = collect_hardware_info()
+                snapshot = {
+                    "hardware": hw,
+                    "os": collect_os_info(),
+                    "drivers_bios": collect_drivers_and_bios(),
+                    "software": collect_installed_software(),
+                    "gaming": audit_gaming_and_dlls(hardware=hw),
+                }
+
+            res = query_gemini_ai(
+                api_key=api_key,
+                snapshot=snapshot,
+                user_prompt=prompt,
+                provider=provider,
+                user_role=sess.get("role", "trial"),
+                grok_api_key=grok_key,
+            )
+            if res.get("success") and not res.get("requires_subscription"):
                 SESSION_STATE["last_ai_analysis"] = res.get("response_text", "")
-                log_action("Consulta Gemini AI", "Diagnóstico inteligente gerado com sucesso.")
+                log_action(f"Análise IA ({res.get('model_used', provider)})", "Diagnóstico inteligente gerado.")
             res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return
@@ -286,11 +448,15 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
         if route == "/api/report/generate":
             snapshot = SESSION_STATE.get("last_snapshot")
             if not snapshot:
+                hw = collect_hardware_info()
+                os_d = collect_os_info()
                 snapshot = {
-                    "hardware": collect_hardware_info(),
-                    "os": collect_os_info(),
+                    "hardware": hw,
+                    "os": os_d,
                     "drivers_bios": collect_drivers_and_bios(),
                     "software": collect_installed_software(),
+                    "gaming": audit_gaming_and_dlls(hardware=hw),
+                    "compatibility": analyze_hardware_compatibility(hw, os_d),
                 }
                 SESSION_STATE["last_snapshot"] = snapshot
 
@@ -309,10 +475,13 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             updates = {}
             if "gemini_api_key" in body and body["gemini_api_key"]:
                 updates["gemini_api_key"] = str(body["gemini_api_key"]).strip()
+            if "grok_api_key" in body and body["grok_api_key"]:
+                updates["grok_api_key"] = str(body["grok_api_key"]).strip()
             if "new_pin" in body and body["new_pin"]:
+                if sess.get("role") != "admin":
+                    self._send_json({"success": False, "message": "Apenas o Administrador pode alterar a senha Master."}, status=403)
+                    return
                 updates["operator_pin_sha256"] = hash_pin(str(body["new_pin"]))
-            if "require_operator_pin" in body:
-                updates["require_operator_pin"] = bool(body["require_operator_pin"])
             ok = save_config(base_dir, updates)
             log_action("Atualização de Configuração", "Parâmetros locais atualizados em config.json.")
             self._send_json({"success": ok, "message": "Configurações salvas com sucesso.", "action_logs": SESSION_STATE["action_logs"]})
