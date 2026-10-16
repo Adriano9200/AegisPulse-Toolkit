@@ -10,6 +10,7 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
 let OPERATOR_TOKEN = localStorage.getItem("aegispulse_token") || "";
 let CURRENT_SNAPSHOT = null;
 let SELECTED_STORAGE_INDEX = 0;
+let SELECTED_STORAGE_UID = "";
 let CURRENT_HEALTH_SCORE = null;
 let CURRENT_FINDINGS_FILTER = "TODOS";
 
@@ -518,8 +519,17 @@ function renderStorageSuiteTab(storageSuite) {
         return;
     }
 
-    if (SELECTED_STORAGE_INDEX >= devs.length) {
+    if (SELECTED_STORAGE_UID) {
+        const foundIdx = devs.findIndex(d => d.device_uid === SELECTED_STORAGE_UID);
+        if (foundIdx >= 0) {
+            SELECTED_STORAGE_INDEX = foundIdx;
+        }
+    }
+    if (SELECTED_STORAGE_INDEX >= devs.length || SELECTED_STORAGE_INDEX < 0) {
         SELECTED_STORAGE_INDEX = 0;
+    }
+    if (devs[SELECTED_STORAGE_INDEX]) {
+        SELECTED_STORAGE_UID = devs[SELECTED_STORAGE_INDEX].device_uid || "";
     }
 
     selectEl.innerHTML = devs.map((d, idx) => `
@@ -557,11 +567,21 @@ function renderStorageSuiteTab(storageSuite) {
     }).join("");
 
     renderSelectedStorageDevice(devs[SELECTED_STORAGE_INDEX]);
+    _renderTargetAndVdsDiagnostics(devs[SELECTED_STORAGE_INDEX], storageSuite);
     renderStorageOpsLog(storageSuite.operations_log || []);
 }
 
 function selectStorageDevice(idx) {
     SELECTED_STORAGE_INDEX = parseInt(idx, 10) || 0;
+    const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
+    if (devs[SELECTED_STORAGE_INDEX]) {
+        SELECTED_STORAGE_UID = devs[SELECTED_STORAGE_INDEX].device_uid || "";
+    }
+    // Limpa caixas de confirmação ao trocar de disco para impedir reutilização acidental em outro destino
+    ["dpFormatConfirmInput", "dpActionConfirmInput", "dpBootConfirmInput"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+    });
     if (CURRENT_SNAPSHOT && CURRENT_SNAPSHOT.storage_suite) {
         renderStorageSuiteTab(CURRENT_SNAPSHOT.storage_suite);
     }
@@ -1674,6 +1694,82 @@ if (btnToggleAudit) {
 // ============================================================================
 
 
+
+function _renderTargetAndVdsDiagnostics(dev, storageSuite) {
+    const banner = document.getElementById("dpTargetSummaryBanner");
+    const vdsBox = document.getElementById("vdsHealthDiagnosticBox");
+    const occupied = storageSuite?.occupied_drive_letters || ["C:"];
+
+    // Atualiza seletor de letras marcando e desabilitando letras já ocupadas (ex: C:, D:, E:, F:, P:)
+    const letterSel = document.getElementById("dpDesiredLetterSelect");
+    if (letterSel) {
+        Array.from(letterSel.options).forEach(opt => {
+            if (opt.value === "AUTO") return;
+            const fmt = `${opt.value}:`.toUpperCase();
+            const isUsed = occupied.includes(fmt);
+            opt.disabled = isUsed;
+            opt.textContent = isUsed ? `Letra ${fmt} (Já Ocupada)` : `Letra ${fmt} (Livre)`;
+        });
+        if (letterSel.selectedOptions[0]?.disabled) {
+            letterSel.value = "AUTO";
+        }
+    }
+
+    if (banner && dev) {
+        const isSys = Boolean(dev.is_system_disk || dev.contains_windows_volume || dev.contains_efi_boot_partition || dev.is_protected_from_destruction);
+        const borderCol = isSys ? "#ef4444" : "#10b981";
+        const bgCol = isSys ? "rgba(239,68,68,0.10)" : "rgba(16,185,129,0.08)";
+        const statusTitle = isSys
+            ? `🔒 DISCO PROTEGIDO PELO SISTEMA — OPERAÇÕES DESTRUTIVAS E FORÇADAS BLOQUEADAS`
+            : `✅ DESTINO ELEGÍVEL PARA MANUTENÇÃO, DESBLOQUEIO OU FORMATAÇÃO`;
+        const reasonsHtml = (dev.protection_reasons && dev.protection_reasons.length)
+            ? `<div style="margin-top:4px;color:#fca5a5;font-size:12px;"><strong>Motivo(s) do Bloqueio:</strong> ${dev.protection_reasons.join(" | ")}</div>`
+            : "";
+
+        const partsSummary = (dev.partitions || []).map(p =>
+            `Partição #${p.partition_number}: <strong>${p.drive_letter}</strong> (${p.filesystem} | ${p.partition_role || p.type} | ${p.capacity?.formatted || ''})`
+        ).join(" • ") || "0 Partições Reconhecidas (Não Inicializado / Espaço Bruto)";
+
+        banner.style.borderColor = borderCol;
+        banner.style.background = bgCol;
+        banner.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <div>
+                    <strong style="color:${borderCol};font-size:13.5px;">${statusTitle}</strong><br>
+                    <span style="font-size:13px;">
+                        🎯 <strong>Destino Selecionado:</strong> <code>Disk #${dev.disk_number} (${dev.device_path})</code> —
+                        <strong>${dev.brand} ${dev.model}</strong> | Série: <code>${dev.serial_number}</code> |
+                        Hash ID: <code>${dev.hardware_identity_hash || 'N/D'}</code> |
+                        Capacidade: <strong>${dev.capacity?.formatted || ''}</strong>
+                    </span>
+                </div>
+                <span class="badge ${isSys ? 'err' : 'ok'}">${isSys ? 'PROTEGIDO (WINDOWS / EFI)' : `DISK #${dev.disk_number} SELECIONADO`}</span>
+            </div>
+            <div style="margin-top:6px;font-size:12px;color:#cbd5e1;">
+                <strong>Partições &amp; Volumes no Destino:</strong> ${partsSummary}
+            </div>
+            ${reasonsHtml}
+        `;
+    }
+
+    if (vdsBox) {
+        const diag = storageSuite?.diskmgmt_diagnostics || {};
+        const isDeg = diag.status === "degraded_or_blocked" || diag.vds_timeout_reached;
+        const col = isDeg ? "#f59e0b" : "#10b981";
+        const evList = (diag.evidence || []).map(e => `<li>${e}</li>`).join("");
+        const recList = (diag.recommended_safe_actions || []).map(r => `<li><strong>Ação Segura:</strong> ${r}</li>`).join("");
+        vdsBox.style.borderColor = col;
+        vdsBox.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <strong style="color:${col};">🩺 Diagnóstico do Subsistema de Disco &amp; Gerenciamento de Disco (diskmgmt.msc / VDS)</strong>
+                <small class="muted">WMI: ${diag.wmi_query_ms ?? 0} ms | VDS: ${diag.vds_query_ms ?? 0} ms | Serviço VDS: ${diag.vds_service_status || 'Running'}</small>
+            </div>
+            <div style="margin-top:4px;color:#e2e8f0;">${diag.summary || 'Subsistema operacional.'}</div>
+            ${evList ? `<ul style="margin:6px 0 0 18px;padding:0;color:#cbd5e1;">${evList}${recList}</ul>` : ''}
+        `;
+    }
+}
+
 function getSelectedStorageDevice() {
     const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
     if (SELECTED_STORAGE_INDEX >= 0 && SELECTED_STORAGE_INDEX < devs.length) {
@@ -1748,7 +1844,7 @@ async function runDiskpartUnlock() {
 async function runDiskpartAssignLetter() {
     const dev = getSelectedStorageDevice();
     if (!dev) return;
-    const letter = document.getElementById("dpDesiredLetterSelect")?.value || "AUTO";
+    const letter = "AUTO";
     showToast(`🔤 Atribuindo letra (${letter}) para Disk #${dev.disk_number} (${dev.model})...`);
     const box = document.getElementById("diskpartConsoleOutput");
     if (box) box.textContent = `⏳ Forçando montagem e atribuição de letra (${letter}) em Disk #${dev.disk_number}...`;
@@ -1779,7 +1875,7 @@ async function runDiskpartFormat() {
     const label = document.getElementById("dpFormatLabelInput")?.value || "AEGIS_DISK";
     const quick = document.getElementById("dpFormatQuickCheckbox")?.checked ?? true;
     const fullRep = document.getElementById("dpFormatFullRepartitionCheckbox")?.checked ?? true;
-    const letter = document.getElementById("dpDesiredLetterSelect")?.value || "AUTO";
+    const letter = "AUTO";
     let confirmTok = document.getElementById("dpFormatConfirmInput")?.value || "";
 
     if (confirmTok.trim().toUpperCase() !== "FORMATAR") {
@@ -1810,7 +1906,8 @@ async function runDiskpartFormat() {
                 partition_style: style,
                 full_repartition: fullRep,
                 desired_letter: letter,
-                confirm_token: confirmTok
+                confirm_token: confirmTok,
+                confirm_device_uid: dev.device_uid
             })
         });
         _updateDiskpartConsole(`FORMATAÇÃO SUPREMA (${fs})`, res);
@@ -1849,7 +1946,8 @@ async function runDiskpartQuickAction(actionName) {
                 disk_number: dev.disk_number,
                 device_uid: dev.device_uid,
                 action: actionName,
-                confirm_token: confirmTok
+                confirm_token: confirmTok,
+                confirm_device_uid: dev.device_uid
             })
         });
         _updateDiskpartConsole(`DISKPART: ${actionName.toUpperCase()}`, res);
@@ -1927,7 +2025,8 @@ async function runCreateBootableDrive() {
                 boot_scheme: scheme,
                 filesystem: fs,
                 volume_label: label,
-                confirm_token: confirmTok
+                confirm_token: confirmTok,
+                confirm_device_uid: dev.device_uid
             })
         });
         _updateDiskpartConsole(`CRIADOR DE DISCO BOOTÁVEL (${scheme})`, res);

@@ -112,19 +112,35 @@ def log_action(action_name: str, summary: str) -> None:
     SESSION_STATE["action_logs"].append(entry)
 
 
-def _find_device_in_snapshot(disk_number: int = 0, device_uid: str = "") -> dict:
+def _resolve_storage_device_strict(disk_number: int | None = None, device_uid: str = "") -> tuple[dict | None, dict]:
+    """
+    Resolve de forma estrita e não-ambígua o dispositivo selecionado:
+    - NUNCA faz fallback silencioso para devs[0] (impedindo redirecionamento acidental para o disco do Windows).
+    """
     snap = SESSION_STATE.get("last_snapshot") or {}
     st = snap.get("storage_suite") or {}
     devs = st.get("devices") or []
-    for d in devs:
-        if (device_uid and d.get("device_uid") == device_uid) or int(d.get("disk_number", -1)) == int(disk_number):
-            return d
-    if devs:
-        return devs[0]
-    fresh = build_complete_storage_suite_payload(SESSION_STATE["base_dir"])
-    if fresh.get("devices"):
-        return fresh["devices"][0]
-    return {"device_uid": "DISK_0", "disk_number": 0, "model": "Disco Principal", "drive_letters": ["C:"], "capacity": {"bytes": 0}}
+    if not devs and SESSION_STATE.get("base_dir"):
+        st = build_complete_storage_suite_payload(SESSION_STATE["base_dir"])
+        devs = st.get("devices") or []
+
+    uid_clean = (device_uid or "").strip()
+    if uid_clean:
+        for d in devs:
+            if str(d.get("device_uid") or "") == uid_clean:
+                return d, st
+    if disk_number is not None:
+        for d in devs:
+            if int(d.get("disk_number", -999)) == int(disk_number):
+                return d, st
+    return None, st
+
+
+def _find_device_in_snapshot(disk_number: int = 0, device_uid: str = "") -> dict:
+    dev, _ = _resolve_storage_device_strict(disk_number=disk_number, device_uid=device_uid)
+    if dev:
+        return dev
+    return {"device_uid": "", "disk_number": disk_number, "model": "Unknown", "serial_number": "UNKNOWN", "drive_letters": [], "capacity": {"bytes": 0}, "is_ambiguous_identity": True}
 
 
 class AegisPulseRequestHandler(BaseHTTPRequestHandler):
@@ -635,41 +651,55 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             self._send_json(res)
             return
 
-        # ==================== v5.0: CENTRAL SUPREMA DISKPART, DESBLOQUEIO, FORMATAÇÃO & BOOTÁVEL ====================
+        # ==================== v5.1: CENTRAL SUPREMA DISKPART COM VALIDAÇÃO CENTRALIZADA OBRIGATÓRIA ====================
         if route == "/api/storage/diskpart/unlock":
-            disk_num = int(body.get("disk_number", 0))
+            req_num = int(body["disk_number"]) if body.get("disk_number") is not None else None
             dev_uid = str(body.get("device_uid", ""))
-            init_raw = bool(body.get("initialize_if_raw", True))
-            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+            init_raw = bool(body.get("initialize_if_raw", False))
+            dev, st = _resolve_storage_device_strict(disk_number=req_num, device_uid=dev_uid)
 
-            res = force_unlock_and_revive_disk(base_dir=base_dir, device=dev, initialize_if_raw=init_raw)
-            updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
-            if SESSION_STATE.get("last_snapshot") and updated_st:
-                SESSION_STATE["last_snapshot"]["storage_suite"] = updated_st
-            res["storage_suite"] = updated_st
+            res = force_unlock_and_revive_disk(
+                base_dir=base_dir,
+                device=dev,
+                initialize_if_raw=init_raw,
+                requested_disk_number=req_num,
+                requested_device_uid=dev_uid,
+                occupied_drive_letters=st.get("occupied_drive_letters"),
+                query_telemetry=st.get("query_telemetry"),
+            )
+            if res.get("success"):
+                updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
+                if SESSION_STATE.get("last_snapshot") and updated_st:
+                    SESSION_STATE["last_snapshot"]["storage_suite"] = updated_st
+                res["storage_suite"] = updated_st
             res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
-            log_action("Desbloqueio Forçado de Disco", res.get("message", ""))
+            log_action("Desbloqueio Seguro de Disco", res.get("message", ""))
             res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return
 
         if route == "/api/storage/diskpart/assign-letter":
-            disk_num = int(body.get("disk_number", 0))
+            req_num = int(body["disk_number"]) if body.get("disk_number") is not None else None
             dev_uid = str(body.get("device_uid", ""))
             desired_letter = str(body.get("desired_letter", "AUTO"))
-            part_num = int(body.get("partition_number", 0))
-            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+            part_num = int(body.get("partition_number", 0) or 0)
+            dev, st = _resolve_storage_device_strict(disk_number=req_num, device_uid=dev_uid)
 
             res = assign_or_change_drive_letter(
                 base_dir=base_dir,
                 device=dev,
                 desired_letter=desired_letter,
                 partition_number=part_num,
+                requested_disk_number=req_num,
+                requested_device_uid=dev_uid,
+                occupied_drive_letters=st.get("occupied_drive_letters"),
+                query_telemetry=st.get("query_telemetry"),
             )
-            updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
-            if SESSION_STATE.get("last_snapshot") and updated_st:
-                SESSION_STATE["last_snapshot"]["storage_suite"] = updated_st
-            res["storage_suite"] = updated_st
+            if res.get("success"):
+                updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
+                if SESSION_STATE.get("last_snapshot") and updated_st:
+                    SESSION_STATE["last_snapshot"]["storage_suite"] = updated_st
+                res["storage_suite"] = updated_st
             res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
             log_action(f"Atribuir Letra ({desired_letter})", res.get("message", ""))
             res["action_logs"] = SESSION_STATE["action_logs"]
@@ -677,8 +707,9 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             return
 
         if route == "/api/storage/diskpart/format":
-            disk_num = int(body.get("disk_number", 0))
+            req_num = int(body["disk_number"]) if body.get("disk_number") is not None else None
             dev_uid = str(body.get("device_uid", ""))
+            confirm_uid = str(body.get("confirm_device_uid", ""))
             fs = str(body.get("filesystem", "NTFS"))
             label = str(body.get("volume_label", "AEGIS_DISK"))
             quick = bool(body.get("quick_format", True))
@@ -686,7 +717,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             full_rep = bool(body.get("full_repartition", False))
             desired_letter = str(body.get("desired_letter", "AUTO"))
             confirm_tok = str(body.get("confirm_token", ""))
-            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+            dev, st = _resolve_storage_device_strict(disk_number=req_num, device_uid=dev_uid)
 
             res = format_and_partition_disk(
                 base_dir=base_dir,
@@ -698,6 +729,11 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 full_repartition=full_rep,
                 desired_letter=desired_letter,
                 confirm_token=confirm_tok,
+                confirm_device_uid=confirm_uid,
+                requested_disk_number=req_num,
+                requested_device_uid=dev_uid,
+                occupied_drive_letters=st.get("occupied_drive_letters"),
+                query_telemetry=st.get("query_telemetry"),
             )
             if res.get("success"):
                 updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
@@ -711,13 +747,14 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             return
 
         if route == "/api/storage/diskpart/action":
-            disk_num = int(body.get("disk_number", 0))
+            req_num = int(body["disk_number"]) if body.get("disk_number") is not None else None
             dev_uid = str(body.get("device_uid", ""))
+            confirm_uid = str(body.get("confirm_device_uid", ""))
             dp_action = str(body.get("action", "detail_disk"))
             custom_scr = str(body.get("custom_script", ""))
             sz_mb = int(body.get("size_mb", 0) or 0)
             confirm_tok = str(body.get("confirm_token", ""))
-            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+            dev, st = _resolve_storage_device_strict(disk_number=req_num, device_uid=dev_uid)
 
             res = execute_diskpart_action(
                 base_dir=base_dir,
@@ -726,6 +763,11 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 custom_script=custom_scr,
                 size_mb=sz_mb,
                 confirm_token=confirm_tok,
+                confirm_device_uid=confirm_uid,
+                requested_disk_number=req_num,
+                requested_device_uid=dev_uid,
+                occupied_drive_letters=st.get("occupied_drive_letters"),
+                query_telemetry=st.get("query_telemetry"),
             )
             if res.get("success") and dp_action != "detail_disk":
                 updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
@@ -739,14 +781,15 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             return
 
         if route == "/api/storage/diskpart/bootable":
-            disk_num = int(body.get("disk_number", 0))
+            req_num = int(body["disk_number"]) if body.get("disk_number") is not None else None
             dev_uid = str(body.get("device_uid", ""))
+            confirm_uid = str(body.get("confirm_device_uid", ""))
             iso_path = str(body.get("iso_path", ""))
             boot_scheme = str(body.get("boot_scheme", "UEFI_GPT"))
             fs = str(body.get("filesystem", "NTFS"))
             label = str(body.get("volume_label", "AEGIS_BOOT"))
             confirm_tok = str(body.get("confirm_token", ""))
-            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+            dev, st = _resolve_storage_device_strict(disk_number=req_num, device_uid=dev_uid)
 
             res = create_bootable_usb_drive(
                 base_dir=base_dir,
@@ -756,6 +799,11 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 filesystem=fs,
                 volume_label=label,
                 confirm_token=confirm_tok,
+                confirm_device_uid=confirm_uid,
+                requested_disk_number=req_num,
+                requested_device_uid=dev_uid,
+                occupied_drive_letters=st.get("occupied_drive_letters"),
+                query_telemetry=st.get("query_telemetry"),
             )
             if res.get("success"):
                 updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
@@ -925,6 +973,7 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
 
 def start_AegisPulse_server(host: str, port: int, base_dir: Path) -> None:
     SESSION_STATE["base_dir"] = base_dir
+    ThreadingHTTPServer.allow_reuse_address = True
     server = ThreadingHTTPServer((host, port), AegisPulseRequestHandler)
     try:
         server.serve_forever()

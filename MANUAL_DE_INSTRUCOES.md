@@ -1,4 +1,4 @@
-# 📘 Manual de Instruções Oficial — AegisPulse IT Toolkit v4.5.0
+# 📘 Manual de Instruções Oficial — AegisPulse IT Toolkit v5.1.0
 
 **Identidade Oficial:**
 > **AegisPulse IT Toolkit**  
@@ -21,7 +21,7 @@
 
 ---
 
-## 2. Como Usar o Novo Módulo: 💿 Discos, SMART & Recuperação (v4.5.0)
+## 2. Como Usar o Novo Módulo: 💿 Discos, SMART & Recuperação (v5.1.0)
 
 Acesse a segunda aba do menu lateral (**💿 Discos, SMART & Recuperação**) para utilizar as 10 seções profissionais:
 
@@ -59,7 +59,7 @@ Acesse a segunda aba do menu lateral (**💿 Discos, SMART & Recuperação**) pa
 
 ---
 
-## 5. Como Operar o AegisPulse Health Score (v4.5.0)
+## 5. Como Operar o AegisPulse Health Score (v5.1.0)
 
 Acesse a nova aba **🩺 Health Score** no menu lateral para visualizar o diagnóstico de saúde geral:
 1. **Pontuação Geral & Cobertura:** Exibe a nota (0–100), faixa de cor, selo de cobertura (ex: `8 de 8 categorias disponíveis`) e o identificador não-volátil do equipamento (`AEGIS-DEV-...`).
@@ -81,7 +81,7 @@ python -m unittest discover -s tests -p "test_*.py" -v
 
 ---
 
-## 4. Como Atualizar sua Pasta Local e Subir a v4.5.0 para o GitHub
+## 4. Como Atualizar sua Pasta Local e Subir a v5.1.0 para o GitHub
 
 Abra o **PowerShell** e execute:
 
@@ -91,6 +91,20 @@ cd "D:\PROJETOS_PESSOAL\AegisPulse-Toolkit"
 python -m unittest discover -s tests -p "test_*.py" -v
 git add .
 git status
-git commit -m "feat(storage): lancamento AegisPulse v4.5.0 com modulo forense de discos, SMART profundo, vida util SQLite, testes de integridade e recuperacao assistida por Adriano Barboza"
+git commit -m "feat(storage): lancamento AegisPulse v5.1.0 com modulo forense de discos, SMART profundo, vida util SQLite, testes de integridade e recuperacao assistida por Adriano Barboza"
 git push
 ```
+
+
+## 🛡️ Novidades da Versão 5.1.0 — Validação Centralizada de Destino (10 Camadas), Proteção Cruzada de Boot (EFI/Windows) & Diagnóstico do `diskmgmt.msc`
+
+- **Validação Centralizada Obrigatória (`validate_destructive_storage_target` — 10 Camadas)**:
+  1. Distinção estrita entre **Disco Físico (`\\.\PhysicalDriveN`)**, **Partição (`Partition #`)**, **Volume (`Volume GUID`)**, **Letra de Unidade (`C:`, `D:`, `E:`)**, **Volume do Windows (`WINDOWS_OS`)** e **Partição de Inicialização (`EFI_BOOT`)**.
+  2. **Proteção Cruzada de Boot (Multi-Disco)**: Se o volume do Windows (`C:`) estiver em um disco (ex: `Disk #2`) e a partição de inicialização EFI estiver em outro disco (ex: `Disk #0`), **ambos os discos** são bloqueados contra formatação, `diskpart clean` ou alterações destrutivas.
+  3. **Identidade Física Imutável (`hardware_identity_hash` + `device_uid`)**: Não depende exclusivamente do número volátil `Disk #N`, protegendo contra renumeração de discos entre reinicializações ou reconexões USB.
+  4. **Bloqueio de Conflito de Letra (ex: `P:` já ocupada)**: Verifica todas as letras montadas no sistema antes de atribuir uma letra e impede atribuição de letra diretamente a discos sem partição ou em estado `RAW`.
+  5. **Confirmação Vinculada ao Destino & Revalidação Live Pré-Execução**: Impede reutilizar a confirmação de um disco em outro e revalida imediatamente antes do comando se o disco não foi removido ou trocado.
+- **Diagnóstico Não-Destrutivo do `diskmgmt.msc` / Virtual Disk Service (`diagnose_diskmgmt_and_vds_health`)**:
+  - Mede o tempo de resposta do kernel WMI (`Win32_DiskDrive`) vs Virtual Disk Service (`Get-Disk` / `Get-Volume`), identifica contenção de I/O causada por unidades USB externas com setores pendentes (`SMART ID 197`) ou autotestes SMART estendidos em andamento, e comprova com evidências quando o SSD NVMe principal está íntegro.
+- **Suíte de Testes Automatizados Ampliada (26 Cenários)**:
+  - 16 cenários de armazenamento, trava de boot, renumeração, conflito de letra `P:`, timeout VDS e inicializador (`tests/test_storage_module.py`) + 10 cenários determinísticos do Health Score (`tests/test_health_score.py`).

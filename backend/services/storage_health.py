@@ -533,6 +533,10 @@ def build_complete_storage_suite_payload(
 
     return {
         "collected_at": forensics.get("collected_at"),
+        "system_drive_letter": forensics.get("system_drive_letter", "C:"),
+        "occupied_drive_letters": forensics.get("occupied_drive_letters", ["C:"]),
+        "query_telemetry": forensics.get("query_telemetry", {}),
+        "diskmgmt_diagnostics": forensics.get("diskmgmt_diagnostics", {}),
         "smartctl_available": forensics.get("smartctl_available"),
         "smartctl_path": forensics.get("smartctl_path"),
         "total_physical_disks": len(enriched_devices),

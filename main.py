@@ -3,9 +3,9 @@
 """
 ================================================================================
 PROJETO: AegisPulse IT Toolkit — Diagnostic, Maintenance & AI Suite
-ARQUIVO: main.py (Ponto de Entrada Principal + Suporte Portátil .EXE / Pendrive)
+ARQUIVO: main.py (Ponto de Entrada Principal, Verificação de Porta e Dependências)
 AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-VERSÃO:  5.0.0
+VERSÃO:  5.1.0
 LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
 ================================================================================
 """
@@ -35,34 +35,84 @@ else:
     BASE_DIR = Path(__file__).resolve().parent
     BUNDLE_DIR = BASE_DIR
 
-# Garante que os pacotes backend.* sejam encontrados tanto em modo script quanto em modo .EXE
 if str(BUNDLE_DIR) not in sys.path:
     sys.path.insert(0, str(BUNDLE_DIR))
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from backend.server import start_AegisPulse_server
-
 AUTHOR_NAME = "Adriano Barboza"
 AUTHOR_EMAIL = "adriano9200@gmail.com"
-APP_VERSION = "5.0.0"
+APP_VERSION = "5.1.0"
 
 CONFIG_FILE = BASE_DIR / "config.json"
 CONFIG_EXAMPLE = BUNDLE_DIR / "config.example.json"
 
 
-def ensure_environment() -> dict:
-    """Garante que pastas de dados, relatórios, logs e config.json existam no Pendrive/pasta local."""
-    (BASE_DIR / "data").mkdir(exist_ok=True)
-    (BASE_DIR / "reports").mkdir(exist_ok=True)
-    (BASE_DIR / "logs").mkdir(exist_ok=True)
+def verify_runtime_dependencies(auto_install: bool = False) -> dict:
+    """Verifica se as dependências necessárias estão presentes no ambiente Python."""
+    missing = []
+    optional_missing = []
+    try:
+        import psutil  # noqa: F401
+    except ImportError:
+        missing.append("psutil")
 
-    # Se estiver rodando como .exe único sem a pasta frontend externa, extrai ou usa BUNDLE_DIR
-    if not CONFIG_FILE.exists():
-        if (BASE_DIR / "config.example.json").exists():
-            shutil.copyfile(BASE_DIR / "config.example.json", CONFIG_FILE)
+    if missing and auto_install and not getattr(sys, "frozen", False):
+        for pkg in list(missing):
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", pkg, "--quiet"],
+                    capture_output=True,
+                    timeout=45,
+                    check=True,
+                )
+                missing.remove(pkg)
+            except Exception:
+                pass
+
+    return {
+        "ok": len(missing) == 0,
+        "missing_required": missing,
+        "missing_optional": optional_missing,
+        "python_executable": sys.executable,
+        "python_version": sys.version.split()[0],
+    }
+
+
+def is_port_in_use(host: str, port: int) -> bool:
+    """Retorna True se já houver um processo escutando na porta especificada."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.6)
+        return s.connect_ex((host, int(port))) == 0
+
+
+def select_available_port(host: str, preferred_port: int = 8765, max_attempts: int = 10) -> tuple[int, bool]:
+    """
+    Verifica se a porta preferencial está livre.
+    Retorna (porta_selecionada, usou_fallback).
+    """
+    if not is_port_in_use(host, preferred_port):
+        return preferred_port, False
+    for offset in range(1, max_attempts + 1):
+        candidate = preferred_port + offset
+        if not is_port_in_use(host, candidate):
+            return candidate, True
+    return preferred_port, False
+
+
+def ensure_environment(base_dir: Path | None = None) -> dict:
+    """Garante que pastas de dados, relatórios, logs e config.json existam."""
+    target_base = base_dir or BASE_DIR
+    (target_base / "data").mkdir(parents=True, exist_ok=True)
+    (target_base / "reports").mkdir(parents=True, exist_ok=True)
+    (target_base / "logs").mkdir(parents=True, exist_ok=True)
+
+    cfg_file = target_base / "config.json"
+    if not cfg_file.exists():
+        if (target_base / "config.example.json").exists():
+            shutil.copyfile(target_base / "config.example.json", cfg_file)
         elif CONFIG_EXAMPLE.exists():
-            shutil.copyfile(CONFIG_EXAMPLE, CONFIG_FILE)
+            shutil.copyfile(CONFIG_EXAMPLE, cfg_file)
 
     default_cfg = {
         "author": AUTHOR_NAME,
@@ -76,9 +126,9 @@ def ensure_environment() -> dict:
         "gemini_model": "gemini-2.5-flash",
     }
 
-    if CONFIG_FILE.exists():
+    if cfg_file.exists():
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(cfg_file, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
                 default_cfg.update(loaded)
         except Exception as exc:
@@ -87,9 +137,13 @@ def ensure_environment() -> dict:
     return default_cfg
 
 
-def launch_desktop_window(url: str) -> None:
-    """Abre SOMENTE a janela dedicada estilo Aplicativo Nativo (Edge/Chrome --app) ou navegador padrão se não houver Edge/Chrome."""
-    time.sleep(0.9)
+def launch_desktop_window(url: str, host: str = "127.0.0.1", port: int = 8765) -> None:
+    """Aguarda o servidor aceitar conexões e abre SOMENTE a janela dedicada estilo Aplicativo (--app)."""
+    for _ in range(25):
+        if is_port_in_use(host, port):
+            break
+        time.sleep(0.15)
+
     if sys.platform.startswith("win"):
         browser_candidates = [
             os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
@@ -107,16 +161,27 @@ def launch_desktop_window(url: str) -> None:
     webbrowser.open(url)
 
 
-def main() -> None:
+def main() -> int:
+    deps = verify_runtime_dependencies(auto_install=False)
+    if not deps["ok"]:
+        print(f"[ERRO] Dependências obrigatórias ausentes: {', '.join(deps['missing_required'])}")
+        print(f"       Execute: '{sys.executable}' -m pip install {' '.join(deps['missing_required'])}")
+        return 1
+
+    from backend.server import start_AegisPulse_server
+
     cfg = ensure_environment()
     host = cfg.get("server_host", "127.0.0.1")
-    port = int(cfg.get("server_port", 8765))
+    preferred_port = int(cfg.get("server_port", 8765))
+    port, used_fallback = select_available_port(host, preferred_port)
     url = f"http://{host}:{port}"
 
     print("=" * 76)
-    print(f"  AEGISPULSE IT TOOLKIT v{APP_VERSION} (Portátil / Pendrive Ready)")
+    print(f"  AEGISPULSE IT TOOLKIT v{APP_VERSION} (Diagnóstico Seguro & Proteção de Boot)")
     print(f"  Desenvolvido por: {AUTHOR_NAME} ({AUTHOR_EMAIL})")
     print("=" * 76)
+    if used_fallback:
+        print(f"  [AVISO] A porta {preferred_port} estava ocupada. Usando porta livre: {port}")
     print(f"  [+] Servidor Backend ativo em : {url}")
     print(f"  [+] Diretório de Dados/SQLite : {BASE_DIR / 'data'}")
     print(f"  [+] Pasta de Relatórios HTML  : {BASE_DIR / 'reports'}")
@@ -124,9 +189,10 @@ def main() -> None:
     print("  [!] Pressione CTRL+C nesta janela para encerrar o Toolkit.")
     print("=" * 76)
 
-    threading.Thread(target=launch_desktop_window, args=(url,), daemon=True).start()
+    threading.Thread(target=launch_desktop_window, args=(url, host, port), daemon=True).start()
     start_AegisPulse_server(host=host, port=port, base_dir=BASE_DIR)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

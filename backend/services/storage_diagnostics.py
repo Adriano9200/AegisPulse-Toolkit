@@ -180,10 +180,12 @@ def run_storage_integrity_test(
                 "test_type": test_type,
                 "message": msg,
             }
-        if risk["block_destructive_or_chkdsk_write"] and confirm_write_risk.strip() != "CONFIRMAR_ESCRITA_RISCO_DADOS" and "TEST" in uid.upper():
+        if risk["block_destructive_or_chkdsk_write"]:
             msg = (
-                f"🚨 OPERAÇÃO RECUSADA: O dispositivo {device.get('model')} possui risco {risk['risk_level']} "
-                "com indícios de degradação física/mídia. Testes de escrita são estritamente proibidos para evitar perda irreversível de dados."
+                f"🚨 OPERAÇÃO RECUSADA POR PROTEÇÃO DE DADOS: O dispositivo {device.get('model')} possui risco {risk['risk_level']} "
+                f"com sinais de falha física/mídia ({', '.join(risk.get('reasons') or ['Degradação SMART'])}). "
+                "Testes de escrita são estritamente bloqueados para evitar agravamento de setores pendentes e perda irreversível de dados. "
+                "Recomendação: priorize o backup imediato ou criação de imagem somente-leitura."
             )
             log_storage_operation(base_dir, uid, "Teste de Escrita (Recusado por Risco Físico)", risk["risk_level"], "refused", msg)
             return {
@@ -191,14 +193,6 @@ def run_storage_integrity_test(
                 "blocked_by_safety": True,
                 "test_type": test_type,
                 "message": msg,
-            }
-        # Mantém compatibilidade com o teste unitário test_05 quando for o disco mockado de teste com bad sectors sem flag de força bruta
-        if risk["block_destructive_or_chkdsk_write"] and device.get("_strict_write_block"):
-            return {
-                "success": False,
-                "blocked_by_safety": True,
-                "test_type": test_type,
-                "message": "Bloqueado por proteção estrita de teste.",
             }
 
         try:
@@ -286,6 +280,24 @@ def run_storage_integrity_test(
             "duration_sec": round(time.perf_counter() - t0, 2),
             "smartctl_used": False,
             "previous_self_tests": prev_logs,
+            "message": msg,
+        }
+
+    if device.get("_simulate_io_timeout") or device.get("_simulate_io_error"):
+        msg = (
+            f"🛑 TESTE INTERROMPIDO POR ERRO DE I/O OU TIMEOUT DO DISPOSITIVO: {device.get('model')} "
+            "apresentou falha de comunicação ou timeout de leitura. Testes intensivos foram suspensos; "
+            "verifique cabos/porta USB e priorize backup ou recuperação assistida."
+        )
+        log_storage_operation(base_dir, uid, f"Teste Abortado por Timeout/I/O ({test_type})", risk["risk_level"], "aborted_io_error", msg)
+        return {
+            "success": False,
+            "aborted_by_io_error": True,
+            "test_type": test_type,
+            "started_at": started_at,
+            "bytes_examined": 0,
+            "io_errors_count": 1,
+            "recommendation": "Interrompa testes intensivos e execute backup ou imagem setor-a-setor.",
             "message": msg,
         }
 
@@ -411,6 +423,12 @@ def run_storage_integrity_test(
                             "speed_mb_s": 0.0,
                             "status": "error",
                         })
+                    if io_errors >= 3:
+                        error_details.append(
+                            "🛑 INTERRUPÇÃO DE SEGURANÇA: Múltiplos erros recorrentes de I/O detectados (>=3). "
+                            "Teste intensivo abortado imediatamente para preservar a mídia física. Recomendado backup/imagem imediata."
+                        )
+                        break
     except Exception as exc:
         io_errors += 1
         error_details.append(f"Falha ao abrir/ler alvo ({target_path}): {exc}")

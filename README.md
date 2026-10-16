@@ -1,10 +1,10 @@
-# 🛡️ AegisPulse IT Toolkit — v5.0.0 (Storage Forensics, SMART, Lifespan, Recovery, CRM & Multi-IA)
+# 🛡️ AegisPulse IT Toolkit — v5.1.0 (Storage Forensics, SMART, Lifespan, Recovery, CRM & Multi-IA)
 
 > **Diagnóstico • Automação • Inteligência**  
 > *Tecnologia sob controle. Suporte com inteligência.*  
 > **Desenvolvido por Adriano Barboza** (`adriano9200@gmail.com` | **WhatsApp Comercial: `+55 61 98515-8434`**)
 
-[![Versão](https://img.shields.io/badge/Vers%C3%A3o-5.0.0_Enterprise-0284c7?style=for-the-badge)](https://github.com/Adriano9200/AegisPulse-Toolkit)
+[![Versão](https://img.shields.io/badge/Vers%C3%A3o-5.1.0_Enterprise-0284c7?style=for-the-badge)](https://github.com/Adriano9200/AegisPulse-Toolkit)
 [![Plataforma](https://img.shields.io/badge/Windows-10_%7C_11_(64--bit)-0078D6?style=for-the-badge&logo=windows)](https://github.com/Adriano9200/AegisPulse-Toolkit)
 [![Storage Forensics](https://img.shields.io/badge/Storage-SMART_%7C_NVMe_%7C_Recovery-f59e0b?style=for-the-badge)](https://github.com/Adriano9200/AegisPulse-Toolkit)
 [![Licença](https://img.shields.io/badge/Licen%C3%A7a-Propriet%C3%A1ria_(Source--Available)-dc2626?style=for-the-badge)](./LICENSE)
@@ -23,9 +23,9 @@ Este repositório no GitHub é disponibilizado na modalidade **Source-Available 
 
 ---
 
-## 💿 Novidade v5.0.0: Estúdio Profissional de Diagnóstico, Saúde SMART, Vida Útil e Recuperação de Armazenamento
+## 💿 Novidade v5.1.0: Estúdio Profissional de Diagnóstico, Saúde SMART, Vida Útil e Recuperação de Armazenamento
 
-O **AegisPulse v5.0.0** incorpora uma suíte forense completa para **HDDs Mecânicos, SSDs SATA, SSDs NVMe, Pendrives USB e Unidades Externas**, estruturada em 10 módulos integrados:
+O **AegisPulse v5.1.0** incorpora uma suíte forense completa para **HDDs Mecânicos, SSDs SATA, SSDs NVMe, Pendrives USB e Unidades Externas**, estruturada em 10 módulos integrados:
 
 1. **Inventário Avançado de Dispositivos (`backend/collectors/storage_advanced.py`):**
    - Identifica fabricante, marca real, modelo, número de série, firmware, interface, protocolo (`NVMe`, `AHCI/SATA`, `USB UASP`, `USB BOT`), tipo de mídia, rotação (`RPM`) e controlador/ponte USB (`JMicron`, `ASMedia`, `Realtek`).
@@ -88,4 +88,18 @@ Nenhum código-fonte GPL dessas ferramentas é embutido ou redistribuído dentro
 
 **Desenvolvido por Adriano Barboza**  
 📱 **WhatsApp:** [+55 61 98515-8434](https://wa.me/5561985158434) | 📧 **E-mail:** `adriano9200@gmail.com`  
-*AegisPulse IT Toolkit v5.0.0 — Diagnóstico • Automação • Inteligência.*
+*AegisPulse IT Toolkit v5.1.0 — Diagnóstico • Automação • Inteligência.*
+
+
+## 🛡️ Novidades da Versão 5.1.0 — Validação Centralizada de Destino (10 Camadas), Proteção Cruzada de Boot (EFI/Windows) & Diagnóstico do `diskmgmt.msc`
+
+- **Validação Centralizada Obrigatória (`validate_destructive_storage_target` — 10 Camadas)**:
+  1. Distinção estrita entre **Disco Físico (`\\.\PhysicalDriveN`)**, **Partição (`Partition #`)**, **Volume (`Volume GUID`)**, **Letra de Unidade (`C:`, `D:`, `E:`)**, **Volume do Windows (`WINDOWS_OS`)** e **Partição de Inicialização (`EFI_BOOT`)**.
+  2. **Proteção Cruzada de Boot (Multi-Disco)**: Se o volume do Windows (`C:`) estiver em um disco (ex: `Disk #2`) e a partição de inicialização EFI estiver em outro disco (ex: `Disk #0`), **ambos os discos** são bloqueados contra formatação, `diskpart clean` ou alterações destrutivas.
+  3. **Identidade Física Imutável (`hardware_identity_hash` + `device_uid`)**: Não depende exclusivamente do número volátil `Disk #N`, protegendo contra renumeração de discos entre reinicializações ou reconexões USB.
+  4. **Bloqueio de Conflito de Letra (ex: `P:` já ocupada)**: Verifica todas as letras montadas no sistema antes de atribuir uma letra e impede atribuição de letra diretamente a discos sem partição ou em estado `RAW`.
+  5. **Confirmação Vinculada ao Destino & Revalidação Live Pré-Execução**: Impede reutilizar a confirmação de um disco em outro e revalida imediatamente antes do comando se o disco não foi removido ou trocado.
+- **Diagnóstico Não-Destrutivo do `diskmgmt.msc` / Virtual Disk Service (`diagnose_diskmgmt_and_vds_health`)**:
+  - Mede o tempo de resposta do kernel WMI (`Win32_DiskDrive`) vs Virtual Disk Service (`Get-Disk` / `Get-Volume`), identifica contenção de I/O causada por unidades USB externas com setores pendentes (`SMART ID 197`) ou autotestes SMART estendidos em andamento, e comprova com evidências quando o SSD NVMe principal está íntegro.
+- **Suíte de Testes Automatizados Ampliada (26 Cenários)**:
+  - 16 cenários de armazenamento, trava de boot, renumeração, conflito de letra `P:`, timeout VDS e inicializador (`tests/test_storage_module.py`) + 10 cenários determinísticos do Health Score (`tests/test_health_score.py`).
