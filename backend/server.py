@@ -893,7 +893,13 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 ai_analysis=SESSION_STATE.get("last_ai_analysis", ""),
                 action_logs=SESSION_STATE["action_logs"],
             )
-            log_action("Exportação de Laudo HTML v4.0", f"Arquivo gerado: {res.get('filename')}")
+            if res.get("report_path") and sys.platform.startswith("win"):
+                try:
+                    import os as _os
+                    _os.startfile(res["report_path"])
+                except Exception:
+                    pass
+            log_action("Exportação de Laudo HTML v5.0", f"Arquivo gerado e aberto: {res.get('filename')}")
             res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return

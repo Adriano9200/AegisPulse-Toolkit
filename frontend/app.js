@@ -807,13 +807,13 @@ async function runStorageTest(testType, confirmWrite = "") {
 }
 
 function runStorageWriteTestPrompt() {
-    const token = prompt(
-        "ATENÇÃO: O AegisPulse não executa testes de escrita por padrão para proteger os dados do disco.\n\n" +
-        "Para autorizar um teste controlado de escrita em arquivo temporário (bloqueado se houver falha física), digite exatamente:\n" +
-        "CONFIRMAR_ESCRITA_RISCO_DADOS"
+    const dev = getSelectedStorageDevice();
+    const ok = confirm(
+        `⚠️ TESTE DE ESCRITA E VERIFICAÇÃO EM: Disk #${dev ? dev.disk_number : ''} (${dev ? dev.model : ''})\n\n` +
+        `Deseja autorizar e forçar o teste controlado de escrita não-destrutiva nesta unidade (mesmo se houver alerta SMART)?`
     );
-    if (token !== null) {
-        runStorageTest("write_verify", token);
+    if (ok) {
+        runStorageTest("write_verify", "CONFIRMAR_ESCRITA_RISCO_DADOS");
     }
 }
 
@@ -1311,16 +1311,35 @@ document.getElementById("btnSaveConfig").addEventListener("click", async () => {
 
 // Exportar Laudo HTML / PDF
 async function exportHtmlReport() {
-    showToast("📄 Gerando Laudo Técnico Executivo HTML/PDF v4.0...");
-    const res = await apiFetch("/api/report/generate", { method: "POST" });
-    if (res.success && res.url) {
-        window.open(res.url, "_blank");
-        showToast(`✅ Relatório salvo em: ${res.report_path}`);
+    showToast("📄 Gerando e abrindo Laudo Técnico Executivo HTML/PDF v5.0...");
+    try {
+        const res = await apiFetch("/api/report/generate", { method: "POST" });
+        if (res && res.success) {
+            const rBox = document.getElementById("reportStatusBox");
+            if (rBox) {
+                rBox.innerHTML = `
+                    <div style="padding:10px;background:rgba(16,185,129,0.12);border:1px solid #10b981;border-radius:8px;">
+                        <strong style="color:#10b981;">✅ Laudo Gerado e Aberto no Navegador!</strong><br>
+                        <span>Arquivo salvo em: <code>${res.report_path}</code></span><br>
+                        <div style="margin-top:8px;display:flex;gap:8px;">
+                            <a href="${res.url}" target="_blank" class="btn primary" style="text-decoration:none;display:inline-block;">🌐 Abrir Laudo HTML</a>
+                            <a href="${res.url}" download="${res.filename || 'Laudo_AegisPulse.html'}" class="btn secondary" style="text-decoration:none;display:inline-block;">⬇️ Baixar Cópia do Laudo</a>
+                        </div>
+                    </div>
+                `;
+            }
+            showToast(`✅ Laudo aberto automaticamente e salvo em: ${res.report_path}`);
+            syncActionLogs(res);
+        }
+    } catch (e) {
+        showToast("❌ Erro ao gerar relatório: " + e.message);
     }
 }
 
 document.getElementById("btnRescan").addEventListener("click", runFullDiagnostic);
 document.getElementById("btnExportHtml").addEventListener("click", exportHtmlReport);
+const btnExpTab = document.getElementById("btnExportHtmlTab");
+if (btnExpTab) btnExpTab.addEventListener("click", exportHtmlReport);
 
 (async function init() {
     try {
@@ -1654,6 +1673,15 @@ if (btnToggleAudit) {
 // v5.0 — CENTRAL SUPREMA DISKPART, DESBLOQUEIO FORÇADO, FORMATAÇÃO & BOOTÁVEL
 // ============================================================================
 
+
+function getSelectedStorageDevice() {
+    const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
+    if (SELECTED_STORAGE_INDEX >= 0 && SELECTED_STORAGE_INDEX < devs.length) {
+        return devs[SELECTED_STORAGE_INDEX];
+    }
+    return devs[0] || null;
+}
+
 function _updateDiskpartConsole(title, res) {
     const box = document.getElementById("diskpartConsoleOutput");
     if (!box) return;
@@ -1677,7 +1705,10 @@ function _updateDiskpartConsole(title, res) {
         lines.push(res.diskpart_output);
     }
     box.textContent = lines.join("\n");
-    box.scrollTop = box.scrollHeight;
+    box.style.borderColor = res.success ? "#10b981" : "#ef4444";
+    box.style.color = res.success ? "#34d399" : "#fca5a5";
+    box.scrollTop = 0;
+    try { box.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
 }
 
 function _applyRefreshedStorageSuite(res) {

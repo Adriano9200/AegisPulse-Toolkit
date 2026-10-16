@@ -949,9 +949,47 @@ def format_and_partition_disk(
 
     is_mock = bool(device.get("_mock_execution"))
     dp_res = _run_diskpart_script(dp_lines, timeout_sec=60 if quick_format else 300, simulate_only=is_mock)
+    ps_fmt_out = ""
+    if platform.system() == "Windows" and not is_mock:
+        # Garante via PowerShell Storage API que a partição foi criada, formatada e montada com letra visível no Explorer!
+        ps_letter_arg = f"-DriveLetter '{letter_clean}'" if (letter_clean != "AUTO" and len(letter_clean) == 1) else "-AssignDriveLetter"
+        ps_fmt_cmd = f"""
+        $ErrorActionPreference = 'SilentlyContinue'
+        Set-Disk -Number {disk_num} -IsOffline $false -IsReadOnly $false
+        $parts = @(Get-Partition -DiskNumber {disk_num} | Where-Object {{ $_.Type -ne 'Reserved' -and $_.Size -gt 32MB }})
+        if ($parts.Count -eq 0) {{
+            Initialize-Disk -Number {disk_num} -PartitionStyle {style_clean} -ErrorAction SilentlyContinue
+            $np = New-Partition -DiskNumber {disk_num} -UseMaximumSize {ps_letter_arg} -ErrorAction SilentlyContinue
+            if ($np) {{
+                Format-Volume -Partition $np -FileSystem {fs_clean} -NewFileSystemLabel '{label_clean}' -Confirm:$false -Force | Out-Null
+            }}
+        }} else {{
+            $bestP = $parts | Sort-Object Size -Descending | Select-Object -First 1
+            if (-not $bestP.DriveLetter) {{
+                if ('{letter_clean}' -ne 'AUTO' -and '{letter_clean}'.Length -eq 1) {{
+                    Set-Partition -DiskNumber {disk_num} -PartitionNumber $bestP.PartitionNumber -NewDriveLetter '{letter_clean}'
+                }} else {{
+                    Add-PartitionAccessPath -DiskNumber {disk_num} -PartitionNumber $bestP.PartitionNumber -AssignDriveLetter
+                }}
+            }}
+            $vol = Get-Partition -DiskNumber {disk_num} -PartitionNumber $bestP.PartitionNumber | Get-Volume
+            if ($vol -and ($vol.FileSystem -eq 'RAW' -or -not $vol.FileSystem)) {{
+                Format-Volume -Partition $bestP -FileSystem {fs_clean} -NewFileSystemLabel '{label_clean}' -Confirm:$false -Force | Out-Null
+            }}
+        }}
+        $finalParts = @(Get-Partition -DiskNumber {disk_num} | Where-Object {{ $_.DriveLetter }})
+        $lettersStr = ($finalParts | ForEach-Object {{ "$($_.DriveLetter):" }}) -join ', '
+        Write-Output "Unidade montada em: $lettersStr"
+        """
+        try:
+            proc_f = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_fmt_cmd], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+            ps_fmt_out = (proc_f.stdout or proc_f.stderr or "").strip()
+        except Exception as exc:
+            ps_fmt_out = str(exc)
+
     msg = (
         f"💿 {op_title} concluída em Disk #{disk_num} ({device.get('model')})! "
-        f"Sistema de arquivos: {fs_clean} | Rótulo: {label_clean} | Letra atribuída automaticamente."
+        f"Sistema de arquivos: {fs_clean} | Rótulo: {label_clean}. {ps_fmt_out}"
     )
     log_storage_operation(base_dir, uid, op_title, risk["risk_level"], "completed" if dp_res["success"] else "warning", msg, dp_res)
     return {
@@ -1139,7 +1177,25 @@ def create_bootable_usb_drive(
 
     is_mock = bool(device.get("_mock_execution"))
     dp_res = _run_diskpart_script(dp_lines, timeout_sec=90, simulate_only=is_mock)
-    steps_log = [f"[1/3] Estrutura de partição bootável ({scheme_up} / {fs_clean.upper()}) criada no Disco #{disk_num} via DiskPart."]
+    if platform.system() == "Windows" and not is_mock:
+        pstyle = "MBR" if is_mbr else "GPT"
+        ps_ensure_boot = f"""
+        $ErrorActionPreference = 'SilentlyContinue'
+        Set-Disk -Number {disk_num} -IsOffline $false -IsReadOnly $false
+        $p = Get-Partition -DiskNumber {disk_num} | Where-Object {{ $_.Size -gt 32MB }} | Sort-Object Size -Descending | Select-Object -First 1
+        if (-not $p) {{
+            Initialize-Disk -Number {disk_num} -PartitionStyle {pstyle} -ErrorAction SilentlyContinue
+            $p = New-Partition -DiskNumber {disk_num} -UseMaximumSize -AssignDriveLetter -ErrorAction SilentlyContinue
+            if ($p) {{ Format-Volume -Partition $p -FileSystem {fs_clean.upper()} -NewFileSystemLabel '{label_clean}' -Confirm:$false -Force | Out-Null }}
+        }} elseif (-not $p.DriveLetter) {{
+            Add-PartitionAccessPath -DiskNumber {disk_num} -PartitionNumber $p.PartitionNumber -AssignDriveLetter
+        }}
+        """
+        try:
+            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_ensure_boot], capture_output=True, timeout=45)
+        except Exception:
+            pass
+    steps_log = [f"[1/3] Estrutura de partição bootável ({scheme_up} / {fs_clean.upper()}) criada no Disco #{disk_num} via DiskPart + Storage API."]
 
     iso_copy_log = ""
     if iso_clean and platform.system() == "Windows" and not is_mock:
