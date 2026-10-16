@@ -5,7 +5,7 @@
 PROJETO: AegisPulse IT Toolkit — Diagnostic, Maintenance & AI Suite
 ARQUIVO: main.py (Ponto de Entrada Principal + Suporte Portátil .EXE / Pendrive)
 AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-VERSÃO:  4.5.0
+VERSÃO:  5.0.0
 LICENÇA: Proprietária — Todos os direitos reservados a Adriano Barboza
 ================================================================================
 """
@@ -45,7 +45,7 @@ from backend.server import start_AegisPulse_server
 
 AUTHOR_NAME = "Adriano Barboza"
 AUTHOR_EMAIL = "adriano9200@gmail.com"
-APP_VERSION = "4.5.0"
+APP_VERSION = "5.0.0"
 
 CONFIG_FILE = BASE_DIR / "config.json"
 CONFIG_EXAMPLE = BUNDLE_DIR / "config.example.json"

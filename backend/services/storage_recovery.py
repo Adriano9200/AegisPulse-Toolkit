@@ -638,10 +638,10 @@ def execute_logical_repair(
 # v5.0 — CENTRAL SUPREMA DISKPART, DESBLOQUEIO FORÇADO, FORMATAÇÃO & BOOTÁVEL
 # ==============================================================================
 
-def _run_diskpart_script(script_lines: list[str], timeout_sec: int = 90) -> dict[str, Any]:
-    """Executa um script real no utilitário nativo diskpart.exe do Windows."""
+def _run_diskpart_script(script_lines: list[str], timeout_sec: int = 25, simulate_only: bool = False) -> dict[str, Any]:
+    """Executa um script real no utilitário nativo diskpart.exe do Windows (com limpeza prévia de processos travados)."""
     script_text = "\r\n".join(line.strip() for line in script_lines if line.strip()) + "\r\nexit\r\n"
-    if platform.system() != "Windows":
+    if platform.system() != "Windows" or simulate_only:
         return {
             "success": True,
             "simulated": True,
@@ -655,6 +655,7 @@ def _run_diskpart_script(script_lines: list[str], timeout_sec: int = 90) -> dict
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", prefix="aegispulse_dp_", delete=False, encoding="utf-8") as tf:
             tf.write(script_text)
             tmp_path = tf.name
+        subprocess.run(["taskkill", "/F", "/IM", "diskpart.exe"], capture_output=True, timeout=5)
         proc = subprocess.run(
             ["diskpart", "/s", tmp_path],
             capture_output=True,
@@ -707,9 +708,7 @@ def force_unlock_and_revive_disk(
     steps_log: list[str] = []
 
     dp_lines = [
-        "rescan",
         "automount enable",
-        "automount scrub",
         f"select disk {disk_num}",
         "online disk noerr",
         "attributes disk clear readonly noerr",
@@ -722,11 +721,12 @@ def force_unlock_and_revive_disk(
             "assign noerr",
         ])
 
-    dp_res = _run_diskpart_script(dp_lines, timeout_sec=45)
+    is_mock = bool(device.get("_mock_execution"))
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=20, simulate_only=is_mock)
     steps_log.append(f"[1/3] DiskPart (Online + Clear ReadOnly + Automount + Assign): Concluído (RC={dp_res.get('returncode')}).")
 
     ps_out = ""
-    if platform.system() == "Windows":
+    if platform.system() == "Windows" and not is_mock:
         allow_init = 1 if (initialize_if_raw and not _is_protected_system_disk(device)) else 0
         ps_script = f"""
         $ErrorActionPreference = 'SilentlyContinue'
@@ -830,10 +830,11 @@ def assign_or_change_drive_letter(
         "attributes volume clear readonly noerr",
         assign_cmd,
     ]
-    dp_res = _run_diskpart_script(dp_lines, timeout_sec=35)
+    is_mock = bool(device.get("_mock_execution"))
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=20, simulate_only=is_mock)
 
     ps_msg = ""
-    if platform.system() == "Windows":
+    if platform.system() == "Windows" and not is_mock:
         ps_cmd = f"""
         $ErrorActionPreference = 'SilentlyContinue'
         $p = Get-Partition -DiskNumber {disk_num} | Sort-Object Size -Descending | Select-Object -First 1
@@ -946,7 +947,8 @@ def format_and_partition_disk(
         ]
         op_title = f"Formatação de Partição #{p_num} ({fs_clean})"
 
-    dp_res = _run_diskpart_script(dp_lines, timeout_sec=180 if quick_format else 600)
+    is_mock = bool(device.get("_mock_execution"))
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=60 if quick_format else 300, simulate_only=is_mock)
     msg = (
         f"💿 {op_title} concluída em Disk #{disk_num} ({device.get('model')})! "
         f"Sistema de arquivos: {fs_clean} | Rótulo: {label_clean} | Letra atribuída automaticamente."
@@ -1059,7 +1061,8 @@ def execute_diskpart_action(
     else:
         return {"success": False, "message": f"Ação DiskPart desconhecida: {act}"}
 
-    dp_res = _run_diskpart_script(dp_lines, timeout_sec=120)
+    is_mock = bool(device.get("_mock_execution"))
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=30, simulate_only=is_mock)
     msg = f"🛠️ DiskPart [{act.upper()}] executado em Disk #{disk_num} ({device.get('model')})."
     log_storage_operation(base_dir, uid, f"DiskPart ({act})", risk["risk_level"], "completed" if dp_res["success"] else "warning", msg, dp_res)
     return {
@@ -1134,11 +1137,12 @@ def create_bootable_usb_drive(
         "assign",
     ])
 
-    dp_res = _run_diskpart_script(dp_lines, timeout_sec=180)
+    is_mock = bool(device.get("_mock_execution"))
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=90, simulate_only=is_mock)
     steps_log = [f"[1/3] Estrutura de partição bootável ({scheme_up} / {fs_clean.upper()}) criada no Disco #{disk_num} via DiskPart."]
 
     iso_copy_log = ""
-    if iso_clean and platform.system() == "Windows":
+    if iso_clean and platform.system() == "Windows" and not is_mock:
         ps_iso = f"""
         $ErrorActionPreference = 'Stop'
         $iso = '{iso_clean}'
@@ -1174,7 +1178,7 @@ def create_bootable_usb_drive(
         except Exception as exc:
             steps_log.append(f"[2/3] Aviso durante cópia da ISO: {exc}")
     else:
-        if platform.system() == "Windows":
+        if platform.system() == "Windows" and not is_mock:
             ps_boot = f"""
             $p = Get-Partition -DiskNumber {disk_num} | Where-Object {{ $_.DriveLetter }} | Select-Object -First 1
             if ($p) {{

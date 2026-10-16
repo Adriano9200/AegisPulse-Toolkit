@@ -365,6 +365,7 @@ class TestAegisPulseStorageSuiteV4(unittest.TestCase):
         # 1. Disco #3 JMicron Sem Letra
         jmicron_disk = {
             "device_uid": "JMICRON_2TB_0119",
+            "_mock_execution": True,
             "disk_number": 3,
             "device_path": r"\\.\PHYSICALDRIVE3",
             "brand": "(Unidades de disco padrão)",

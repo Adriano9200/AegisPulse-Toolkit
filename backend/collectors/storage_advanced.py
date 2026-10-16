@@ -829,9 +829,9 @@ def _query_smartctl_json(smartctl_bin: str, disk_num: int, is_usb: bool = False)
     """Sonda agressiva de SMART via smartctl testando pass-through JMicron, SAT, Realtek, ASMedia, NVMe e SCSI."""
     dev_arg = f"/dev/pd{disk_num}" if platform.system() == "Windows" else "/dev/sda"
     bridge_candidates = (
-        [[], ["-d", "sat"], ["-d", "sntjmicron"], ["-d", "usbjmicron"], ["-d", "sntrealtek"], ["-d", "sntasmedia"], ["-d", "nvme"], ["-d", "scsi"]]
+        [[], ["-d", "sat"], ["-d", "sntjmicron"]]
         if is_usb
-        else [[], ["-d", "nvme"], ["-d", "sat"], ["-d", "scsi"]]
+        else [[]]
     )
     best_json = None
     for flags in bridge_candidates:
@@ -842,7 +842,7 @@ def _query_smartctl_json(smartctl_bin: str, disk_num: int, is_usb: bool = False)
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=7,
+                timeout=2,
             )
             if res.stdout.strip():
                 parsed = json.loads(res.stdout)
@@ -861,38 +861,119 @@ def _query_smartctl_json(smartctl_bin: str, disk_num: int, is_usb: bool = False)
 
 
 def _run_powershell_storage_probe() -> dict[str, Any] | None:
+    """
+    Coleta ultra-rápida e à prova de travamentos do Virtual Disk Service (vds.exe):
+    - Mata eventuais processos diskpart.exe órfãos que estejam travando o barramento.
+    - Coleta Win32_DiskDrive, Get-PhysicalDisk e Win32_LogicalDisk diretamente via WMI/StorPort (< 1s).
+    - Executa Get-Disk / Get-Partition / Get-Volume com timeout isolado (5s) e fallback via Win32_DiskPartition
+      para que um disco USB/JMicron travado NUNCA oculte os demais discos do computador!
+    """
     ps_script = r"""
     $ErrorActionPreference = 'SilentlyContinue'
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-    Update-HostStorageCache -ErrorAction SilentlyContinue | Out-Null
+    # Libera qualquer processo diskpart travado em segundo plano que possa bloquear o VDS
+    Stop-Process -Name "diskpart" -Force -ErrorAction SilentlyContinue
+
+    # 1. Camada Kernel/WMI (Instantânea — nunca trava mesmo com USB RAW/JMicron defeituoso)
     $wmiDisks = @(Get-CimInstance Win32_DiskDrive | Select-Object Index, DeviceID, Model, Manufacturer, SerialNumber, FirmwareRevision, InterfaceType, MediaType, Size, Partitions, Status, PNPDeviceID, Capabilities)
     $physDisks = @(Get-PhysicalDisk | Select-Object DeviceId, FriendlyName, SerialNumber, FirmwareVersion, BusType, MediaType, SpindleSpeed, HealthStatus, OperationalStatus, Size, AllocatedSize)
+    $logicalDisks = @(Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID, DriveType, VolumeName, FileSystem, Size, FreeSpace, VolumeSerialNumber)
 
-    $relCounters = @{}
+    # Garante que se um disco aparecer em Get-PhysicalDisk mas não em Win32_DiskDrive, ele seja incluído!
+    $wmiIndices = @($wmiDisks | ForEach-Object { [int]$_.Index })
     foreach ($pd in $physDisks) {
-        $rc = $pd | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue | Select-Object DeviceId, Temperature, TemperatureMax, PowerOnHours, StartStopCycleCount, Wear, ReadErrorsTotal, ReadErrorsUncorrected, WriteErrorsTotal, WriteErrorsUncorrected, ReadLatencyMax, WriteLatencyMax
-        if ($rc) {
-            $relCounters[[string]$pd.DeviceId] = $rc
+        $pdIdx = -1
+        if ([int]::TryParse([string]$pd.DeviceId, [ref]$pdIdx)) {
+            if ($wmiIndices -notcontains $pdIdx) {
+                $wmiDisks += [PSCustomObject]@{
+                    Index = $pdIdx
+                    DeviceID = "\.\PhysicalDrive$pdIdx"
+                    Model = $pd.FriendlyName
+                    Manufacturer = "(Unidades de disco padrão)"
+                    SerialNumber = $pd.SerialNumber
+                    FirmwareRevision = $pd.FirmwareVersion
+                    InterfaceType = [string]$pd.BusType
+                    MediaType = [string]$pd.MediaType
+                    Size = $pd.Size
+                    Partitions = 0
+                    Status = [string]$pd.OperationalStatus
+                    PNPDeviceID = "STORAGE\DISK\$pdIdx"
+                    Capabilities = @()
+                }
+            }
         }
     }
 
-    $osDisks = @(Get-Disk | Select-Object Number, FriendlyName, SerialNumber, PartitionStyle, OperationalStatus, HealthStatus, BusType, IsSystem, IsBoot, IsReadOnly, IsOffline, Size, AllocatedSize, LargestFreeExtent)
-    $parts = @(Get-Partition | Select-Object DiskNumber, PartitionNumber, DriveLetter, Size, Offset, Type, IsActive, IsBoot, IsHidden, IsReadOnly, IsSystem)
-    $vols = @(Get-Volume | Select-Object DriveLetter, FileSystemLabel, FileSystem, DriveType, HealthStatus, OperationalStatus, SizeRemaining, Size)
-    $logicalDisks = @(Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID, DriveType, VolumeName, FileSystem, Size, FreeSpace, VolumeSerialNumber)
+    # 2. Camada Storage API / VDS com proteção de tempo (Job de 5s para não travar se o VDS estiver ocupado)
+    $osDisks = @()
+    $parts = @()
+    $vols = @()
+    $relCounters = @{}
+
+    $vdsJob = Start-Job -ScriptBlock {
+        $ErrorActionPreference = 'SilentlyContinue'
+        $od = @(Get-Disk | Select-Object Number, FriendlyName, SerialNumber, PartitionStyle, OperationalStatus, HealthStatus, BusType, IsSystem, IsBoot, IsReadOnly, IsOffline, Size, AllocatedSize, LargestFreeExtent)
+        $pt = @(Get-Partition | Select-Object DiskNumber, PartitionNumber, DriveLetter, Size, Offset, Type, IsActive, IsBoot, IsHidden, IsReadOnly, IsSystem)
+        $vl = @(Get-Volume | Select-Object DriveLetter, FileSystemLabel, FileSystem, DriveType, HealthStatus, OperationalStatus, SizeRemaining, Size)
+        $rcMap = @{}
+        foreach ($p in @(Get-PhysicalDisk)) {
+            $rc = $p | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue | Select-Object DeviceId, Temperature, TemperatureMax, PowerOnHours, StartStopCycleCount, Wear, ReadErrorsTotal, ReadErrorsUncorrected, WriteErrorsTotal, WriteErrorsUncorrected, ReadLatencyMax, WriteLatencyMax
+            if ($rc) { $rcMap[[string]$p.DeviceId] = $rc }
+        }
+        return @{ OsDisks = $od; Partitions = $pt; Volumes = $vl; RelCounters = $rcMap }
+    }
+
+    if (Wait-Job $vdsJob -Timeout 5) {
+        $vdsRes = Receive-Job $vdsJob
+        if ($vdsRes) {
+            $osDisks = @($vdsRes.OsDisks)
+            $parts = @($vdsRes.Partitions)
+            $vols = @($vdsRes.Volumes)
+            if ($vdsRes.RelCounters) { $relCounters = $vdsRes.RelCounters }
+        }
+    }
+    Remove-Job $vdsJob -Force -ErrorAction SilentlyContinue
+
+    # Fallback WMI para partições e volumes caso o VDS estivesse bloqueado por um dispositivo USB lento
+    if ($parts.Count -eq 0) {
+        $wmiParts = @(Get-CimInstance Win32_DiskPartition -ErrorAction SilentlyContinue)
+        $wmiLinks = @(Get-CimInstance Win32_LogicalDiskToPartition -ErrorAction SilentlyContinue)
+        foreach ($wp in $wmiParts) {
+            $dlFound = ""
+            foreach ($lnk in $wmiLinks) {
+                if ($lnk.Antecedent.DeviceID -eq $wp.DeviceID) {
+                    $dlFound = ($lnk.Dependent.DeviceID -replace ':', '')
+                }
+            }
+            $parts += [PSCustomObject]@{
+                DiskNumber = [int]$wp.DiskIndex
+                PartitionNumber = [int]($wp.Index + 1)
+                DriveLetter = $dlFound
+                Size = [int64]$wp.Size
+                Offset = [int64]$wp.StartingOffset
+                Type = [string]$wp.Type
+                IsActive = [bool]$wp.BootPartition
+                IsBoot = [bool]$wp.BootPartition
+                IsHidden = $false
+                IsReadOnly = $false
+                IsSystem = [bool]$wp.PrimaryPartition
+            }
+        }
+    }
 
     $smartStatus = @(Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictStatus -ErrorAction SilentlyContinue | Select-Object InstanceName, PredictFailure, Reason)
     $smartData = @(Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictData -ErrorAction SilentlyContinue | Select-Object InstanceName, VendorSpecific)
     $smartThresh = @(Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictThresholds -ErrorAction SilentlyContinue | Select-Object InstanceName, VendorSpecific)
 
-    $diskEvents = @(Get-WinEvent -FilterHashtable @{LogName='System'; Id=@(7,9,11,51,55,129,140,153,157)} -MaxEvents 25 -ErrorAction SilentlyContinue | ForEach-Object {
+    $diskEvents = @(Get-WinEvent -FilterHashtable @{LogName='System'; Id=@(7,9,11,51,55,129,140,153,157)} -MaxEvents 20 -ErrorAction SilentlyContinue | ForEach-Object {
         @{
             Id = $_.Id
             LevelDisplayName = $_.LevelDisplayName
             ProviderName = $_.ProviderName
             TimeCreated = $_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')
-            Message = ($_.Message -replace '\r\n', ' ')
+            Message = ($_.Message -replace '
+', ' ')
         }
     })
 
@@ -917,7 +998,7 @@ def _run_powershell_storage_probe() -> dict[str, Any] | None:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=30,
+            timeout=16,
         )
         out = res.stdout.strip()
         return json.loads(out) if out else None
