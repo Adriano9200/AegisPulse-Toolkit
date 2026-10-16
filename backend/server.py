@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import sys
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -86,6 +87,15 @@ SESSION_STATE = {
     "last_ai_analysis": "",
     "action_logs": [],
 }
+
+
+
+def _safe_call(fn, *args, default=None, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except Exception as exc:
+        print(f"[AVISO] Coletor {getattr(fn, '__name__', 'fn')} falhou parcialmente: {exc}")
+        return default if default is not None else {}
 
 
 def log_action(action_name: str, summary: str) -> None:
@@ -198,14 +208,21 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            hw = collect_hardware_info()
-            os_data = collect_os_info()
-            drv_bios = collect_drivers_and_bios()
-            sw = collect_installed_software()
-            net = collect_network_diagnostics()
-            gaming = audit_gaming_and_dlls(hardware=hw)
-            compat = analyze_hardware_compatibility(hardware=hw, os_info=os_data)
-            storage_suite = build_complete_storage_suite_payload(base_dir=base_dir)
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                f_hw = pool.submit(_safe_call, collect_hardware_info, default={})
+                f_os = pool.submit(_safe_call, collect_os_info, default={})
+                f_drv = pool.submit(_safe_call, collect_drivers_and_bios, default={})
+                f_sw = pool.submit(_safe_call, collect_installed_software, default={})
+                f_net = pool.submit(_safe_call, collect_network_diagnostics, default={})
+                f_st = pool.submit(_safe_call, build_complete_storage_suite_payload, base_dir, default={})
+                hw = f_hw.result()
+                os_data = f_os.result()
+                drv_bios = f_drv.result()
+                sw = f_sw.result()
+                net = f_net.result()
+                storage_suite = f_st.result()
+            gaming = _safe_call(audit_gaming_and_dlls, hardware=hw, default={})
+            compat = _safe_call(analyze_hardware_compatibility, hardware=hw, os_info=os_data, default={})
             health_eval = compute_health_score(
                 {
                     "hardware": hw,
@@ -214,7 +231,6 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                     "software": sw,
                     "gaming": gaming,
                     "storage_suite": storage_suite,
-                "health_score": health_eval,
                 },
                 base_dir=base_dir,
             )
@@ -469,14 +485,21 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
 
         # ==================== ROTAS DO MÓDULO DE DISCOS, SMART & RECUPERAÇÃO (v4.0) ====================
         if route == "/api/health-score/evaluate":
-            hw = collect_hardware_info()
-            os_data = collect_os_info()
-            drv_bios = collect_drivers_and_bios()
-            sw = collect_installed_software()
-            net = collect_network_diagnostics()
-            gaming = audit_gaming_and_dlls(hardware=hw)
-            compat = analyze_hardware_compatibility(hardware=hw, os_info=os_data)
-            storage_suite = build_complete_storage_suite_payload(base_dir=base_dir)
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                f_hw = pool.submit(_safe_call, collect_hardware_info, default={})
+                f_os = pool.submit(_safe_call, collect_os_info, default={})
+                f_drv = pool.submit(_safe_call, collect_drivers_and_bios, default={})
+                f_sw = pool.submit(_safe_call, collect_installed_software, default={})
+                f_net = pool.submit(_safe_call, collect_network_diagnostics, default={})
+                f_st = pool.submit(_safe_call, build_complete_storage_suite_payload, base_dir, default={})
+                hw = f_hw.result()
+                os_data = f_os.result()
+                drv_bios = f_drv.result()
+                sw = f_sw.result()
+                net = f_net.result()
+                storage_suite = f_st.result()
+            gaming = _safe_call(audit_gaming_and_dlls, hardware=hw, default={})
+            compat = _safe_call(analyze_hardware_compatibility, hardware=hw, os_info=os_data, default={})
 
             eval_res = compute_health_score(
                 {

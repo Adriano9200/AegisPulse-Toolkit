@@ -10,6 +10,8 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
 let OPERATOR_TOKEN = localStorage.getItem("aegispulse_token") || "";
 let CURRENT_SNAPSHOT = null;
 let SELECTED_STORAGE_INDEX = 0;
+let CURRENT_HEALTH_SCORE = null;
+let CURRENT_FINDINGS_FILTER = "TODOS";
 
 function showToast(msg) {
     const t = document.getElementById("statusToast");
@@ -318,14 +320,15 @@ document.getElementById("crmSearchInput").addEventListener("input", (e) => {
 });
 
 async function runFullDiagnostic() {
-    showToast("🔍 Executando varredura completa v4.0 (Hardware, Discos/SMART/TBW, Temperaturas CPU/GPU, Compatibilidade, BIOS, Drivers, Softwares, Rede & PC Gamer)...");
+    showToast("🔍 Executando varredura completa v4.5 em paralelo (Hardware, Health Score, Discos/SMART, Temperaturas, BIOS, Drivers, Softwares, Rede & PC Gamer)...");
     try {
         const data = await apiFetch("/api/scan/full");
         CURRENT_SNAPSHOT = data;
         renderDashboard(data);
-        showToast("✅ Diagnóstico Forense v4.0 concluído com sucesso!");
+        showToast("✅ Diagnóstico Forense e Health Score v4.5 concluídos com sucesso!");
     } catch (err) {
-        console.warn("Sessão aguardando autenticação ou limite Trial atingido:", err);
+        console.error("Erro na varredura /api/scan/full:", err);
+        showToast("⚠️ Erro ao coletar diagnóstico: " + (err.message || "Clique em Atualizar Diagnóstico."));
     }
 }
 
@@ -1342,8 +1345,6 @@ document.getElementById("btnExportHtml").addEventListener("click", exportHtmlRep
 })();
 
 // ==================== CONTROLADOR AEGISPULSE HEALTH SCORE (v4.5) ====================
-let CURRENT_HEALTH_SCORE = null;
-let CURRENT_FINDINGS_FILTER = "TODOS";
 
 function renderHealthScoreTab(hs) {
     if (!hs) return;
