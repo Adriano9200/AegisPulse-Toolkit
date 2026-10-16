@@ -546,7 +546,11 @@ function renderStorageSuiteTab(storageSuite) {
             <td><code>${d.serial_number}</code><br><small class="muted">FW: ${d.firmware}</small></td>
             <td><strong>${d.media_category}</strong><br><small class="muted">${d.protocol}</small></td>
             <td><strong>${d.capacity?.formatted || ''}</strong><br><small class="muted">${(d.capacity?.bytes || 0).toLocaleString()} bytes</small></td>
-            <td><strong>${d.partition_style}</strong><br><small class="muted">${(d.drive_letters || []).join(", ") || "Sem Letra"}</small></td>
+            <td><strong>${d.partition_style}</strong><br>${
+    (d.drive_letters && d.drive_letters.length)
+        ? `<small class="muted"><strong>${d.drive_letters.join(", ")}</strong></small>`
+        : `<span class="badge warn" style="cursor:pointer;display:inline-block;margin-top:3px;" onclick="event.stopPropagation(); selectStorageDevice(${idx}); runDiskpartUnlock();" title="Clique para forçar desbloqueio e atribuir uma letra de unidade imediatamente">⚠️ Sem Letra (⚡ Desbloquear/Montar)</span>`
+}</td>
             <td>${stateBadges}</td>
         </tr>
         `;
@@ -1643,4 +1647,262 @@ if (btnToggleAudit) {
         const p = document.getElementById("hsAuditPanel");
         if (p) p.classList.toggle("hidden");
     });
+}
+
+
+// ============================================================================
+// v5.0 — CENTRAL SUPREMA DISKPART, DESBLOQUEIO FORÇADO, FORMATAÇÃO & BOOTÁVEL
+// ============================================================================
+
+function _updateDiskpartConsole(title, res) {
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (!box) return;
+    const lines = [];
+    lines.push(`=== ${title} (Disk #${res.disk_number ?? ''}) ===`);
+    if (res.message) lines.push(res.message);
+    if (Array.isArray(res.steps_log) && res.steps_log.length) {
+        lines.push("--- Etapas Executadas ---");
+        res.steps_log.forEach(s => lines.push(s));
+    }
+    if (res.powershell_output) {
+        lines.push("--- Saída Storage API / PowerShell ---");
+        lines.push(res.powershell_output);
+    }
+    if (res.diskpart_script) {
+        lines.push("--- Script DiskPart Enviado ---");
+        lines.push(res.diskpart_script);
+    }
+    if (res.diskpart_output) {
+        lines.push("--- Saída Nativa diskpart.exe ---");
+        lines.push(res.diskpart_output);
+    }
+    box.textContent = lines.join("\n");
+    box.scrollTop = box.scrollHeight;
+}
+
+function _applyRefreshedStorageSuite(res) {
+    if (res && res.storage_suite && Array.isArray(res.storage_suite.devices)) {
+        if (!CURRENT_SNAPSHOT) CURRENT_SNAPSHOT = {};
+        CURRENT_SNAPSHOT.storage_suite = res.storage_suite;
+        renderStorageSuiteTab(res.storage_suite);
+    }
+    syncActionLogs(res);
+}
+
+async function runDiskpartUnlock() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const initRaw = document.getElementById("dpInitIfRawCheckbox")?.checked ?? true;
+    showToast(`⚡ Forçando desbloqueio total, remoção de Read-Only e atribuição de letra em Disk #${dev.disk_number} (${dev.model})...`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Executando desbloqueio agressivo via DiskPart + Storage API em Disk #${dev.disk_number} (${dev.model})...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/unlock", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                initialize_if_raw: initRaw
+            })
+        });
+        _updateDiskpartConsole("DESBLOQUEIO FORÇADO & MONTAGEM", res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Disco desbloqueado e montado com sucesso!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro no desbloqueio: ${e.message}`;
+    }
+}
+
+async function runDiskpartAssignLetter() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const letter = document.getElementById("dpDesiredLetterSelect")?.value || "AUTO";
+    showToast(`🔤 Atribuindo letra (${letter}) para Disk #${dev.disk_number} (${dev.model})...`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Forçando montagem e atribuição de letra (${letter}) em Disk #${dev.disk_number}...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/assign-letter", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                desired_letter: letter,
+                partition_number: 0
+            })
+        });
+        _updateDiskpartConsole(`ATRIBUIÇÃO DE LETRA (${letter})`, res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Letra atribuída com sucesso!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro ao atribuir letra: ${e.message}`;
+    }
+}
+
+async function runDiskpartFormat() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const fs = document.getElementById("dpFormatFsSelect")?.value || "NTFS";
+    const style = document.getElementById("dpFormatStyleSelect")?.value || "GPT";
+    const label = document.getElementById("dpFormatLabelInput")?.value || "AEGIS_DISK";
+    const quick = document.getElementById("dpFormatQuickCheckbox")?.checked ?? true;
+    const fullRep = document.getElementById("dpFormatFullRepartitionCheckbox")?.checked ?? true;
+    const letter = document.getElementById("dpDesiredLetterSelect")?.value || "AUTO";
+    let confirmTok = document.getElementById("dpFormatConfirmInput")?.value || "";
+
+    if (confirmTok.trim().toUpperCase() !== "FORMATAR") {
+        const p = prompt(
+            `⚠️ ATENÇÃO: Você está prestes a formatar o Disco #${dev.disk_number} (${dev.brand} ${dev.model} — ${dev.capacity?.formatted || ''}) em ${fs} (${style}).\n\n` +
+            `Todos os dados desta unidade serão apagados e ela receberá uma letra de unidade limpa.\n` +
+            `Digite exatamente FORMATAR para confirmar:`
+        );
+        if (!p) return;
+        confirmTok = p.trim();
+        const inp = document.getElementById("dpFormatConfirmInput");
+        if (inp) inp.value = confirmTok;
+    }
+
+    showToast(`💿 Formatando Disk #${dev.disk_number} (${dev.model}) em ${fs} e atribuindo letra... aguarde!`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Executando DiskPart Format (${fs} / ${style}) em Disk #${dev.disk_number} (${dev.model})...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/format", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                filesystem: fs,
+                volume_label: label,
+                quick_format: quick,
+                partition_style: style,
+                full_repartition: fullRep,
+                desired_letter: letter,
+                confirm_token: confirmTok
+            })
+        });
+        _updateDiskpartConsole(`FORMATAÇÃO SUPREMA (${fs})`, res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Formatação concluída!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro na formatação: ${e.message}`;
+    }
+}
+
+async function runDiskpartQuickAction(actionName) {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    let confirmTok = document.getElementById("dpActionConfirmInput")?.value || "";
+    const destructive = ["clean_disk", "clean_all_zero", "convert_gpt", "convert_mbr"];
+
+    if (destructive.includes(actionName) && !["CONFIRMAR", "FORMATAR", "LIMPAR"].includes(confirmTok.trim().toUpperCase())) {
+        const p = prompt(
+            `⚠️ A operação DiskPart '${actionName.toUpperCase()}' vai limpar/reconverter a tabela de partições do Disco #${dev.disk_number} (${dev.model}).\n\n` +
+            `Digite CONFIRMAR para executar:`
+        );
+        if (!p) return;
+        confirmTok = p.trim();
+        const inp = document.getElementById("dpActionConfirmInput");
+        if (inp) inp.value = confirmTok;
+    }
+
+    showToast(`🛠️ Executando DiskPart [${actionName.toUpperCase()}] em Disk #${dev.disk_number}...`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Executando comando DiskPart [${actionName}] em Disk #${dev.disk_number}...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/action", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                action: actionName,
+                confirm_token: confirmTok
+            })
+        });
+        _updateDiskpartConsole(`DISKPART: ${actionName.toUpperCase()}`, res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || `Comando DiskPart ${actionName} concluído!`);
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro no DiskPart: ${e.message}`;
+    }
+}
+
+async function runDiskpartCustomScript() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const scr = document.getElementById("dpCustomScriptInput")?.value || "";
+    if (!scr.trim()) {
+        showToast("Digite os comandos DiskPart na caixa de script antes de executar.");
+        return;
+    }
+    showToast(`💻 Executando script customizado no DiskPart...`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Executando script DiskPart...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/action", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                action: "custom_script",
+                custom_script: scr,
+                confirm_token: "CONFIRMAR"
+            })
+        });
+        _updateDiskpartConsole("SCRIPT DISKPART CUSTOMIZADO", res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Script DiskPart executado!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro no script DiskPart: ${e.message}`;
+    }
+}
+
+async function runCreateBootableDrive() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const scheme = document.getElementById("dpBootSchemeSelect")?.value || "UEFI_GPT";
+    const fs = document.getElementById("dpBootFsSelect")?.value || "NTFS";
+    const label = document.getElementById("dpBootLabelInput")?.value || "AEGIS_BOOT";
+    const isoPath = document.getElementById("dpBootIsoPathInput")?.value || "";
+    let confirmTok = document.getElementById("dpBootConfirmInput")?.value || "";
+
+    if (!["CRIAR_BOOT", "FORMATAR", "CONFIRMAR"].includes(confirmTok.trim().toUpperCase())) {
+        const p = prompt(
+            `🚀 CRIADOR DE MÍDIA BOOTÁVEL (${scheme} / ${fs}):\n` +
+            `Alvo: Disco #${dev.disk_number} (${dev.brand} ${dev.model} — ${dev.capacity?.formatted || ''})\n` +
+            (isoPath ? `ISO: ${isoPath}\n` : `Modo: Preparar Partição de Boot Ativa + Setor NT60\n`) +
+            `\nDigite CRIAR_BOOT ou FORMATAR para autorizar:`
+        );
+        if (!p) return;
+        confirmTok = p.trim();
+        const inp = document.getElementById("dpBootConfirmInput");
+        if (inp) inp.value = confirmTok;
+    }
+
+    showToast(`🚀 Criando estrutura bootável (${scheme}) em Disk #${dev.disk_number}... aguarde!`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Preparando disco bootável (${scheme} / ${fs}) em Disk #${dev.disk_number} (${dev.model})...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/bootable", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                iso_path: isoPath,
+                boot_scheme: scheme,
+                filesystem: fs,
+                volume_label: label,
+                confirm_token: confirmTok
+            })
+        });
+        _updateDiskpartConsole(`CRIADOR DE DISCO BOOTÁVEL (${scheme})`, res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Mídia bootável criada com sucesso!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro ao criar mídia bootável: ${e.message}`;
+    }
 }

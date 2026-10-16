@@ -825,22 +825,39 @@ def _find_smartctl_binary() -> str | None:
     return None
 
 
-def _query_smartctl_json(smartctl_bin: str, disk_num: int) -> dict[str, Any] | None:
+def _query_smartctl_json(smartctl_bin: str, disk_num: int, is_usb: bool = False) -> dict[str, Any] | None:
+    """Sonda agressiva de SMART via smartctl testando pass-through JMicron, SAT, Realtek, ASMedia, NVMe e SCSI."""
     dev_arg = f"/dev/pd{disk_num}" if platform.system() == "Windows" else "/dev/sda"
-    try:
-        res = subprocess.run(
-            [smartctl_bin, "-a", "-j", dev_arg],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=10,
-        )
-        if res.stdout.strip():
-            return json.loads(res.stdout)
-    except Exception:
-        pass
-    return None
+    bridge_candidates = (
+        [[], ["-d", "sat"], ["-d", "sntjmicron"], ["-d", "usbjmicron"], ["-d", "sntrealtek"], ["-d", "sntasmedia"], ["-d", "nvme"], ["-d", "scsi"]]
+        if is_usb
+        else [[], ["-d", "nvme"], ["-d", "sat"], ["-d", "scsi"]]
+    )
+    best_json = None
+    for flags in bridge_candidates:
+        try:
+            res = subprocess.run(
+                [smartctl_bin, *flags, "-a", "-j", dev_arg],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=7,
+            )
+            if res.stdout.strip():
+                parsed = json.loads(res.stdout)
+                if isinstance(parsed, dict):
+                    if best_json is None:
+                        best_json = parsed
+                    # Se encontrou atributos ATA, log NVMe ou temperatura, retorna imediatamente!
+                    has_ata = bool(parsed.get("ata_smart_attributes", {}).get("table"))
+                    has_nvme = bool(parsed.get("nvme_smart_health_information_log"))
+                    has_temp = bool(parsed.get("temperature", {}).get("current"))
+                    if has_ata or has_nvme or has_temp:
+                        return parsed
+        except Exception:
+            continue
+    return best_json
 
 
 def _run_powershell_storage_probe() -> dict[str, Any] | None:
@@ -848,6 +865,7 @@ def _run_powershell_storage_probe() -> dict[str, Any] | None:
     $ErrorActionPreference = 'SilentlyContinue'
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+    Update-HostStorageCache -ErrorAction SilentlyContinue | Out-Null
     $wmiDisks = @(Get-CimInstance Win32_DiskDrive | Select-Object Index, DeviceID, Model, Manufacturer, SerialNumber, FirmwareRevision, InterfaceType, MediaType, Size, Partitions, Status, PNPDeviceID, Capabilities)
     $physDisks = @(Get-PhysicalDisk | Select-Object DeviceId, FriendlyName, SerialNumber, FirmwareVersion, BusType, MediaType, SpindleSpeed, HealthStatus, OperationalStatus, Size, AllocatedSize)
 
@@ -1172,10 +1190,39 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
                 break
 
         sc_json = wd.get("_mock_smartctl") or (
-            _query_smartctl_json(smartctl_bin, disk_num) if smartctl_bin and raw_override is None else None
+            _query_smartctl_json(smartctl_bin, disk_num, is_usb=brand_ctrl["is_usb_bridge"]) if smartctl_bin and raw_override is None else None
         )
+        sc_ata_attrs: list[dict[str, Any]] = []
         if isinstance(sc_json, dict):
             nvme_smart_dict = sc_json.get("nvme_smart_health_information_log") or {}
+            for sc_row in (sc_json.get("ata_smart_attributes", {}).get("table") or []):
+                aid = int(sc_row.get("id") or 0)
+                if aid <= 0:
+                    continue
+                defn = SMART_ATTRIBUTE_DEFINITIONS.get(aid, {})
+                raw_obj = sc_row.get("raw") or {}
+                raw_val = int(raw_obj.get("value") or 0) if isinstance(raw_obj, dict) else int(raw_obj or 0)
+                curr_v = int(sc_row.get("value") or 100)
+                worst_v = int(sc_row.get("worst") or curr_v)
+                thresh_v = int(sc_row.get("thresh") or 0)
+                is_crit = bool(defn.get("critical", False))
+                sev = "critical" if (thresh_v > 0 and curr_v <= thresh_v) or (aid in (5, 197, 198, 187) and raw_val > 0) else ("warning" if (aid == 199 and raw_val > 0) else "ok")
+                sc_ata_attrs.append({
+                    "id_num": aid,
+                    "id": f"0x{aid:02X} ({aid})",
+                    "name": sc_row.get("name") or defn.get("name") or f"Vendor Attribute {aid}",
+                    "current": curr_v,
+                    "worst": worst_v,
+                    "threshold": thresh_v,
+                    "raw_hex": f"0x{raw_val:012X}",
+                    "raw_int": raw_val,
+                    "interpreted_value": f"{raw_val} {defn.get('unit', '')}".strip(),
+                    "unit": defn.get("unit", ""),
+                    "severity": sev,
+                    "pre_fail": is_crit,
+                    "vendor_note": "Coletado via Bridge Pass-Through (smartctl)",
+                    "meaning": defn.get("meaning") or "Atributo SMART lido diretamente pelo controlador via pass-through.",
+                })
             st_table = (
                 sc_json.get("ata_smart_self_test_log", {}).get("standard", {}).get("table")
                 or sc_json.get("nvme_self_test_log", {}).get("table")
@@ -1190,7 +1237,7 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
                     "failing_lba": st.get("failing_lba"),
                 })
 
-        ata_attributes = parse_ata_smart_binary(ata_vendor_bytes, ata_thresh_bytes, brand=brand_ctrl["brand"])
+        ata_attributes = parse_ata_smart_binary(ata_vendor_bytes, ata_thresh_bytes, brand=brand_ctrl["brand"]) or sc_ata_attrs
         nvme_rel_attributes, summary_metrics = build_nvme_or_reliability_attributes(
             rel_counter=rel_c,
             nvme_log=nvme_smart_dict,

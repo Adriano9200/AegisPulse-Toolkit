@@ -1,11 +1,23 @@
 @echo off
 chcp 65001 >nul
-title AegisPulse IT Toolkit v4.5 - Por Adriano Barboza
+title AegisPulse IT Toolkit v5.0 Supremo - Por Adriano Barboza
 cd /d "%~dp0"
 
+REM 0. Garante execucao como Administrador (UAC) para acesso bruto a \\.\PhysicalDrive, DiskPart e SMART USB
+net session >nul 2>&1
+if errorlevel 1 goto :ELEVATE_UAC
+goto :ADMIN_OK
+
+:ELEVATE_UAC
+echo [INFO] Elevando AegisPulse para modo Administrador (necessario para DiskPart, Formatar e PhysicalDrive)...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
+exit /b 0
+
+:ADMIN_OK
 echo ============================================================================
-echo   AEGISPULSE IT TOOLKIT v4.5 - Health Score + Storage Forensics + Multi-IA
+echo   AEGISPULSE IT TOOLKIT v5.0 - Health Score + DiskPart Supremo + Multi-IA
 echo   Desenvolvido por Adriano Barboza ^| WhatsApp: +55 61 98515-8434
+echo   [MODO ADMINISTRADOR ATIVO - Acesso Total a Discos Fisicos, USB e DiskPart]
 echo ============================================================================
 echo.
 

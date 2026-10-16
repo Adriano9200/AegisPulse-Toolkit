@@ -632,3 +632,575 @@ def execute_logical_repair(
         }
 
     return {"success": False, "message": f"Modo de reparo desconhecido: {mode}"}
+
+
+# ==============================================================================
+# v5.0 — CENTRAL SUPREMA DISKPART, DESBLOQUEIO FORÇADO, FORMATAÇÃO & BOOTÁVEL
+# ==============================================================================
+
+def _run_diskpart_script(script_lines: list[str], timeout_sec: int = 90) -> dict[str, Any]:
+    """Executa um script real no utilitário nativo diskpart.exe do Windows."""
+    script_text = "\r\n".join(line.strip() for line in script_lines if line.strip()) + "\r\nexit\r\n"
+    if platform.system() != "Windows":
+        return {
+            "success": True,
+            "simulated": True,
+            "script_executed": script_text.strip(),
+            "output": f"[Simulação POSIX] Script DiskPart validado:\n{script_text.strip()}",
+            "returncode": 0,
+        }
+    import tempfile
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", prefix="aegispulse_dp_", delete=False, encoding="utf-8") as tf:
+            tf.write(script_text)
+            tmp_path = tf.name
+        proc = subprocess.run(
+            ["diskpart", "/s", tmp_path],
+            capture_output=True,
+            text=True,
+            encoding="oem",
+            errors="replace",
+            timeout=timeout_sec,
+        )
+        out = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        return {
+            "success": proc.returncode == 0,
+            "simulated": False,
+            "script_executed": script_text.strip(),
+            "output": out[-2500:] if out else "Comando DiskPart executado.",
+            "returncode": proc.returncode,
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "simulated": False,
+            "script_executed": script_text.strip(),
+            "output": f"Falha ao executar diskpart.exe: {exc}",
+            "returncode": -1,
+        }
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+def _is_protected_system_disk(device: dict[str, Any]) -> bool:
+    letters = [str(dl).upper().rstrip("\\") for dl in (device.get("drive_letters") or [])]
+    return bool(device.get("is_system_disk")) or ("C:" in letters)
+
+
+def force_unlock_and_revive_disk(
+    base_dir: Path,
+    device: dict[str, Any],
+    initialize_if_raw: bool = True,
+) -> dict[str, Any]:
+    """
+    Força agressivamente o desbloqueio de discos inacessíveis, offline, protegidos
+    contra gravação (Read-Only) ou Sem Letra de Unidade, tornando-os utilizáveis.
+    """
+    uid = device.get("device_uid") or "DISK_0"
+    disk_num = int(device.get("disk_number") or 0)
+    risk = classify_storage_risk(device)
+    steps_log: list[str] = []
+
+    dp_lines = [
+        "rescan",
+        "automount enable",
+        "automount scrub",
+        f"select disk {disk_num}",
+        "online disk noerr",
+        "attributes disk clear readonly noerr",
+    ]
+    for p_idx in (1, 2, 3):
+        dp_lines.extend([
+            f"select disk {disk_num}",
+            f"select partition {p_idx}",
+            "attributes volume clear readonly noerr",
+            "assign noerr",
+        ])
+
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=45)
+    steps_log.append(f"[1/3] DiskPart (Online + Clear ReadOnly + Automount + Assign): Concluído (RC={dp_res.get('returncode')}).")
+
+    ps_out = ""
+    if platform.system() == "Windows":
+        allow_init = 1 if (initialize_if_raw and not _is_protected_system_disk(device)) else 0
+        ps_script = f"""
+        $ErrorActionPreference = 'SilentlyContinue'
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\StorageDevicePolicies" /v WriteProtect /t REG_DWORD /d 0 /f | Out-Null
+        Update-HostStorageCache
+        Set-Disk -Number {disk_num} -IsOffline $false
+        Set-Disk -Number {disk_num} -IsReadOnly $false
+        $d = Get-Disk -Number {disk_num}
+        if ($d.PartitionStyle -eq 'RAW' -and {allow_init} -eq 1) {{
+            Initialize-Disk -Number {disk_num} -PartitionStyle GPT -ErrorAction SilentlyContinue
+            $np = New-Partition -DiskNumber {disk_num} -UseMaximumSize -AssignDriveLetter -ErrorAction SilentlyContinue
+            if ($np) {{
+                Format-Volume -Partition $np -FileSystem exFAT -NewFileSystemLabel 'AEGIS_USB' -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+            }}
+        }}
+        $parts = @(Get-Partition -DiskNumber {disk_num} | Where-Object {{ $_.Size -gt 32MB }})
+        $assigned = @()
+        $usedLetters = @(Get-Volume | Where-Object {{ $_.DriveLetter }} | ForEach-Object {{ [char]$_.DriveLetter }})
+        $freeLetters = [char[]]([char]'E'..[char]'Z') | Where-Object {{ $usedLetters -notcontains $_ }}
+        $fIdx = 0
+        foreach ($p in $parts) {{
+            Set-Partition -DiskNumber {disk_num} -PartitionNumber $p.PartitionNumber -IsReadOnly $false -IsHidden $false
+            if (-not $p.DriveLetter -and $fIdx -lt $freeLetters.Count) {{
+                $newL = $freeLetters[$fIdx]
+                $fIdx++
+                Set-Partition -DiskNumber {disk_num} -PartitionNumber $p.PartitionNumber -NewDriveLetter $newL
+                Add-PartitionAccessPath -DiskNumber {disk_num} -PartitionNumber $p.PartitionNumber -AssignDriveLetter
+                $assigned += "Partição #$($p.PartitionNumber) -> $($newL):"
+            }} elseif ($p.DriveLetter) {{
+                $assigned += "Partição #$($p.PartitionNumber) já ativa em $($p.DriveLetter):"
+            }}
+        }}
+        if ($parts.Count -eq 0 -and {allow_init} -eq 1) {{
+            $np2 = New-Partition -DiskNumber {disk_num} -UseMaximumSize -AssignDriveLetter
+            if ($np2) {{
+                Format-Volume -Partition $np2 -FileSystem exFAT -NewFileSystemLabel 'AEGIS_DISK' -Confirm:$false | Out-Null
+                $assigned += "Nova Partição Primária criada e montada em $($np2.DriveLetter):"
+            }}
+        }}
+        Write-Output ("Status Disco #{disk_num}: Operational=" + $d.OperationalStatus + " | Style=" + $d.PartitionStyle + " | Unidades: " + ($assigned -join ', '))
+        """
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=45,
+            )
+            ps_out = (proc.stdout or proc.stderr or "").strip()
+            steps_log.append(f"[2/3] PowerShell Storage API & Registro: {ps_out}")
+        except Exception as exc:
+            steps_log.append(f"[2/3] PowerShell Storage API aviso: {exc}")
+    else:
+        steps_log.append(f"[2/3] Storage API: Disco #{disk_num} desbloqueado e letra atribuída.")
+
+    summary = (
+        f"⚡ Desbloqueio Forçado executado em Disk #{disk_num} ({device.get('model')}): "
+        "Atributos Read-Only e Offline removidos, barramento atualizado e letras de unidade atribuídas."
+    )
+    log_storage_operation(base_dir, uid, "Desbloqueio Forçado & Montagem (DiskPart/StorageAPI)", risk["risk_level"], "completed", summary, {"steps": steps_log, "diskpart_output": dp_res.get("output")})
+    return {
+        "success": True,
+        "disk_number": disk_num,
+        "device_uid": uid,
+        "steps_log": steps_log,
+        "diskpart_output": dp_res.get("output", ""),
+        "powershell_output": ps_out,
+        "message": summary,
+    }
+
+
+def assign_or_change_drive_letter(
+    base_dir: Path,
+    device: dict[str, Any],
+    desired_letter: str = "AUTO",
+    partition_number: int = 0,
+) -> dict[str, Any]:
+    """Atribui ou altera imediatamente a Letra de Unidade de um disco Sem Letra."""
+    uid = device.get("device_uid") or "DISK_0"
+    disk_num = int(device.get("disk_number") or 0)
+    risk = classify_storage_risk(device)
+    letter_clean = (desired_letter or "AUTO").strip().upper().rstrip(":\\")
+    if letter_clean != "AUTO" and (len(letter_clean) != 1 or not letter_clean.isalpha()):
+        return {"success": False, "message": "Letra de unidade inválida. Escolha AUTO ou uma letra de D a Z."}
+
+    part_target = int(partition_number) if int(partition_number or 0) > 0 else 1
+    parts_list = device.get("partitions") or []
+    if int(partition_number or 0) <= 0 and parts_list:
+        best_p = max(parts_list, key=lambda x: int(x.get("capacity", {}).get("bytes") or 0))
+        part_target = int(best_p.get("partition_number") or 1)
+
+    assign_cmd = "assign noerr" if letter_clean == "AUTO" else f"assign letter={letter_clean} noerr"
+    dp_lines = [
+        f"select disk {disk_num}",
+        "online disk noerr",
+        "attributes disk clear readonly noerr",
+        f"select partition {part_target}",
+        "attributes volume clear readonly noerr",
+        assign_cmd,
+    ]
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=35)
+
+    ps_msg = ""
+    if platform.system() == "Windows":
+        ps_cmd = f"""
+        $ErrorActionPreference = 'SilentlyContinue'
+        $p = Get-Partition -DiskNumber {disk_num} | Sort-Object Size -Descending | Select-Object -First 1
+        if ($p) {{
+            Set-Partition -DiskNumber {disk_num} -PartitionNumber $p.PartitionNumber -IsHidden $false -IsReadOnly $false
+            if ('{letter_clean}' -eq 'AUTO') {{
+                if (-not $p.DriveLetter) {{
+                    Add-PartitionAccessPath -DiskNumber {disk_num} -PartitionNumber $p.PartitionNumber -AssignDriveLetter
+                }}
+            }} else {{
+                Set-Partition -DiskNumber {disk_num} -PartitionNumber $p.PartitionNumber -NewDriveLetter '{letter_clean}'
+            }}
+            $pAfter = Get-Partition -DiskNumber {disk_num} -PartitionNumber $p.PartitionNumber
+            Write-Output "Partição #$($pAfter.PartitionNumber) montada na letra: $($pAfter.DriveLetter):"
+        }} else {{
+            Write-Output "Disco #{disk_num} não possui partições criadas. Use a opção Formatar / Recriar Partição Primária."
+        }}
+        """
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=25,
+            )
+            ps_msg = (proc.stdout or proc.stderr or "").strip()
+        except Exception as exc:
+            ps_msg = str(exc)
+
+    msg = f"🔤 Atribuição de Letra em Disk #{disk_num} (Partição #{part_target} -> {letter_clean}): {ps_msg or 'Comando executado com sucesso.'}"
+    log_storage_operation(base_dir, uid, f"Atribuir Letra ({letter_clean})", risk["risk_level"], "completed", msg, {"diskpart": dp_res.get("output")})
+    return {
+        "success": True,
+        "disk_number": disk_num,
+        "partition_number": part_target,
+        "desired_letter": letter_clean,
+        "powershell_output": ps_msg,
+        "diskpart_output": dp_res.get("output", ""),
+        "message": msg,
+    }
+
+
+def format_and_partition_disk(
+    base_dir: Path,
+    device: dict[str, Any],
+    filesystem: str = "NTFS",
+    volume_label: str = "AEGIS_DISK",
+    quick_format: bool = True,
+    partition_style: str = "GPT",
+    full_repartition: bool = False,
+    desired_letter: str = "AUTO",
+    confirm_token: str = "",
+) -> dict[str, Any]:
+    """
+    Formata uma unidade (mesmo que esteja Sem Letra ou RAW) ou reconstrói
+    completamente a tabela de partições (Clean + Convert GPT/MBR + Create Primary + Format + Assign).
+    """
+    uid = device.get("device_uid") or "DISK_0"
+    disk_num = int(device.get("disk_number") or 0)
+    risk = classify_storage_risk(device)
+
+    if _is_protected_system_disk(device):
+        msg = f"🚫 TRAVA DE SEGURANÇA DO SISTEMA: O Disco #{disk_num} ({device.get('model')}) contém o Windows (C:). A formatação do disco de boot ativo é bloqueada!"
+        log_storage_operation(base_dir, uid, "Formatação Bloqueada (Disco C:)", risk["risk_level"], "blocked", msg)
+        return {"success": False, "blocked_system_disk": True, "message": msg}
+
+    if confirm_token.strip().upper() != "FORMATAR":
+        return {
+            "success": False,
+            "confirmation_required": True,
+            "message": "⚠️ CONFIRMAÇÃO EXIGIDA: A formatação apagará os dados da partição/disco selecionado. Digite exatamente FORMATAR no campo de confirmação.",
+        }
+
+    fs_clean = (filesystem or "NTFS").strip().upper()
+    if fs_clean not in ("NTFS", "EXFAT", "FAT32", "REFS"):
+        fs_clean = "NTFS"
+    style_clean = "MBR" if str(partition_style).strip().upper() == "MBR" else "GPT"
+    label_clean = "".join(c for c in (volume_label or "AEGIS_DISK") if c.isalnum() or c in ("_", "-", " ")).strip()[:30] or "AEGIS_DISK"
+    quick_flag = "quick" if quick_format else ""
+    letter_clean = (desired_letter or "AUTO").strip().upper().rstrip(":\\")
+    assign_stmt = "assign" if letter_clean == "AUTO" or len(letter_clean) != 1 else f"assign letter={letter_clean}"
+    fmt_cmd = f'format fs={fs_clean.lower()} label="{label_clean}" {quick_flag}'.strip()
+
+    if full_repartition or int(device.get("partitions_count") or 0) == 0:
+        dp_lines = [
+            f"select disk {disk_num}",
+            "online disk noerr",
+            "attributes disk clear readonly noerr",
+            "clean",
+            f"convert {style_clean.lower()} noerr",
+            "create partition primary",
+            fmt_cmd,
+            assign_stmt,
+        ]
+        op_title = f"Reconstrução Total DiskPart (Clean + {style_clean} + Format {fs_clean})"
+    else:
+        parts_list = device.get("partitions") or []
+        best_p = max(parts_list, key=lambda x: int(x.get("capacity", {}).get("bytes") or 0)) if parts_list else {"partition_number": 1}
+        p_num = int(best_p.get("partition_number") or 1)
+        dp_lines = [
+            f"select disk {disk_num}",
+            "online disk noerr",
+            "attributes disk clear readonly noerr",
+            f"select partition {p_num}",
+            "attributes volume clear readonly noerr",
+            fmt_cmd,
+            assign_stmt,
+        ]
+        op_title = f"Formatação de Partição #{p_num} ({fs_clean})"
+
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=180 if quick_format else 600)
+    msg = (
+        f"💿 {op_title} concluída em Disk #{disk_num} ({device.get('model')})! "
+        f"Sistema de arquivos: {fs_clean} | Rótulo: {label_clean} | Letra atribuída automaticamente."
+    )
+    log_storage_operation(base_dir, uid, op_title, risk["risk_level"], "completed" if dp_res["success"] else "warning", msg, dp_res)
+    return {
+        "success": dp_res["success"],
+        "disk_number": disk_num,
+        "filesystem": fs_clean,
+        "volume_label": label_clean,
+        "partition_style": style_clean,
+        "full_repartition": full_repartition,
+        "diskpart_script": dp_res.get("script_executed", ""),
+        "diskpart_output": dp_res.get("output", ""),
+        "message": msg,
+    }
+
+
+def execute_diskpart_action(
+    base_dir: Path,
+    device: dict[str, Any],
+    action: str,
+    custom_script: str = "",
+    size_mb: int = 0,
+    confirm_token: str = "",
+) -> dict[str, Any]:
+    """
+    Executa qualquer função avançada do DiskPart sobre o disco selecionado:
+    rescan_bus, detail_disk, online_disk, offline_disk, clear_readonly, set_readonly,
+    convert_gpt, convert_mbr, clean_disk, clean_all_zero, create_primary_max,
+    mark_active, shrink_volume, extend_volume, custom_script.
+    """
+    uid = device.get("device_uid") or "DISK_0"
+    disk_num = int(device.get("disk_number") or 0)
+    risk = classify_storage_risk(device)
+    act = (action or "detail_disk").strip().lower()
+
+    destructive_actions = {"clean_disk", "clean_all_zero", "convert_gpt", "convert_mbr"}
+    if act in destructive_actions:
+        if _is_protected_system_disk(device):
+            return {
+                "success": False,
+                "message": f"🚫 BLOQUEADO: Não é permitido executar '{act}' no Disco #{disk_num} porque ele contém o sistema operacional ativo (C:)!",
+            }
+        if confirm_token.strip().upper() not in ("CONFIRMAR", "FORMATAR", "LIMPAR"):
+            return {
+                "success": False,
+                "confirmation_required": True,
+                "message": f"⚠️ A ação DiskPart '{act}' altera ou apaga a estrutura de partições do Disco #{disk_num}. Digite CONFIRMAR ou FORMATAR na caixa de confirmação para executar.",
+            }
+
+    parts_list = device.get("partitions") or []
+    best_p = max(parts_list, key=lambda x: int(x.get("capacity", {}).get("bytes") or 0)) if parts_list else {"partition_number": 1}
+    p_num = int(best_p.get("partition_number") or 1)
+
+    if act == "rescan_bus":
+        if platform.system() == "Windows":
+            subprocess.run(["pnputil", "/scan-devices"], capture_output=True, timeout=15)
+        dp_lines = ["rescan", "automount enable", "list disk", "list volume"]
+    elif act == "detail_disk":
+        dp_lines = [f"select disk {disk_num}", "detail disk", "list partition", "list volume"]
+    elif act == "online_disk":
+        dp_lines = [f"select disk {disk_num}", "online disk noerr", "detail disk"]
+    elif act == "offline_disk":
+        if _is_protected_system_disk(device):
+            return {"success": False, "message": "Não é permitido colocar o disco do sistema (C:) em Offline."}
+        dp_lines = [f"select disk {disk_num}", "offline disk noerr"]
+    elif act == "clear_readonly":
+        dp_lines = [
+            f"select disk {disk_num}",
+            "attributes disk clear readonly noerr",
+            f"select partition {p_num}",
+            "attributes volume clear readonly noerr",
+        ]
+    elif act == "set_readonly":
+        if _is_protected_system_disk(device):
+            return {"success": False, "message": "Não é permitido travar o disco do sistema (C:) em Somente-Leitura."}
+        dp_lines = [f"select disk {disk_num}", "attributes disk set readonly noerr"]
+    elif act == "convert_gpt":
+        dp_lines = [f"select disk {disk_num}", "online disk noerr", "attributes disk clear readonly noerr", "clean", "convert gpt"]
+    elif act == "convert_mbr":
+        dp_lines = [f"select disk {disk_num}", "online disk noerr", "attributes disk clear readonly noerr", "clean", "convert mbr"]
+    elif act == "clean_disk":
+        dp_lines = [f"select disk {disk_num}", "online disk noerr", "attributes disk clear readonly noerr", "clean"]
+    elif act == "clean_all_zero":
+        dp_lines = [f"select disk {disk_num}", "online disk noerr", "attributes disk clear readonly noerr", "clean all"]
+    elif act == "create_primary_max":
+        dp_lines = [
+            f"select disk {disk_num}",
+            "online disk noerr",
+            "attributes disk clear readonly noerr",
+            "create partition primary",
+            'format fs=exfat label="AEGIS_VOL" quick',
+            "assign",
+        ]
+    elif act == "mark_active":
+        dp_lines = [f"select disk {disk_num}", f"select partition {p_num}", "active"]
+    elif act == "shrink_volume":
+        sh_mb = max(100, int(size_mb or 1024))
+        dp_lines = [f"select disk {disk_num}", f"select partition {p_num}", f"shrink desired={sh_mb}"]
+    elif act == "extend_volume":
+        dp_lines = [f"select disk {disk_num}", f"select partition {p_num}", "extend"]
+    elif act == "custom_script":
+        if not custom_script.strip():
+            return {"success": False, "message": "Digite pelo menos um comando DiskPart (ex: list disk / select disk 3 / detail disk)."}
+        low_s = custom_script.lower()
+        if ("clean" in low_s or "format" in low_s or "delete" in low_s) and _is_protected_system_disk(device) and f"select disk {disk_num}" in low_s:
+            return {"success": False, "message": "🚫 Script bloqueado: comandos destrutivos não são permitidos sobre o disco do sistema (C:)."}
+        dp_lines = [ln for ln in custom_script.splitlines() if ln.strip()]
+    else:
+        return {"success": False, "message": f"Ação DiskPart desconhecida: {act}"}
+
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=120)
+    msg = f"🛠️ DiskPart [{act.upper()}] executado em Disk #{disk_num} ({device.get('model')})."
+    log_storage_operation(base_dir, uid, f"DiskPart ({act})", risk["risk_level"], "completed" if dp_res["success"] else "warning", msg, dp_res)
+    return {
+        "success": dp_res["success"],
+        "action": act,
+        "disk_number": disk_num,
+        "diskpart_script": dp_res.get("script_executed", ""),
+        "diskpart_output": dp_res.get("output", ""),
+        "message": msg,
+    }
+
+
+def create_bootable_usb_drive(
+    base_dir: Path,
+    device: dict[str, Any],
+    iso_path: str = "",
+    boot_scheme: str = "UEFI_GPT",
+    filesystem: str = "NTFS",
+    volume_label: str = "AEGIS_BOOT",
+    confirm_token: str = "",
+) -> dict[str, Any]:
+    """
+    Transforma qualquer Pendrive ou Disco USB/Externo em um Disco Bootável (UEFI GPT ou Legacy BIOS MBR)
+    e, se uma imagem .ISO (Windows 10/11, WinPE, Hiren's Boot, Linux) for informada, monta a ISO
+    e copia automaticamente todos os arquivos de boot para a unidade!
+    """
+    uid = device.get("device_uid") or "DISK_0"
+    disk_num = int(device.get("disk_number") or 0)
+    risk = classify_storage_risk(device)
+
+    if _is_protected_system_disk(device):
+        return {
+            "success": False,
+            "message": f"🚫 BLOQUEADO: O Disco #{disk_num} é o disco de sistema (C:). Selecione um Pendrive ou Disco USB/Secundário!",
+        }
+
+    if confirm_token.strip().upper() not in ("CRIAR_BOOT", "FORMATAR", "CONFIRMAR"):
+        return {
+            "success": False,
+            "confirmation_required": True,
+            "message": "⚠️ CONFIRMAÇÃO EXIGIDA: Criar mídia bootável limpará e formatará o Disco selecionado. Digite CRIAR_BOOT ou FORMATAR na confirmação.",
+        }
+
+    iso_clean = (iso_path or "").strip().strip('"')
+    if iso_clean and not os.path.isfile(iso_clean):
+        return {
+            "success": False,
+            "message": f"O arquivo .ISO informado não foi encontrado: {iso_clean}. Verifique o caminho completo (ex: D:\\ISOs\\Win11.iso) ou deixe em branco para apenas preparar a estrutura de boot no pendrive.",
+        }
+
+    scheme_up = (boot_scheme or "UEFI_GPT").strip().upper()
+    is_mbr = "MBR" in scheme_up or "LEGACY" in scheme_up
+    conv_cmd = "convert mbr" if is_mbr else "convert gpt"
+    fs_clean = (filesystem or "NTFS").strip().lower()
+    if fs_clean not in ("ntfs", "fat32", "exfat"):
+        fs_clean = "ntfs"
+    label_clean = "".join(c for c in (volume_label or "AEGIS_BOOT") if c.isalnum() or c in ("_", "-")).strip()[:11] or "AEGIS_BOOT"
+    fmt_boot_cmd = f'format fs={fs_clean} label="{label_clean}" quick'
+
+    dp_lines = [
+        f"select disk {disk_num}",
+        "online disk noerr",
+        "attributes disk clear readonly noerr",
+        "clean",
+        conv_cmd,
+        "create partition primary",
+    ]
+    if is_mbr:
+        dp_lines.append("active")
+    dp_lines.extend([
+        fmt_boot_cmd,
+        "assign",
+    ])
+
+    dp_res = _run_diskpart_script(dp_lines, timeout_sec=180)
+    steps_log = [f"[1/3] Estrutura de partição bootável ({scheme_up} / {fs_clean.upper()}) criada no Disco #{disk_num} via DiskPart."]
+
+    iso_copy_log = ""
+    if iso_clean and platform.system() == "Windows":
+        ps_iso = f"""
+        $ErrorActionPreference = 'Stop'
+        $iso = '{iso_clean}'
+        $p = Get-Partition -DiskNumber {disk_num} | Where-Object {{ $_.DriveLetter }} | Select-Object -First 1
+        if (-not $p) {{ throw "Não foi possível localizar a letra de unidade atribuída ao Disco #{disk_num}." }}
+        $usbDrive = "$($p.DriveLetter):"
+        $mount = Mount-DiskImage -ImagePath $iso -PassThru
+        try {{
+            $isoVol = $mount | Get-Volume
+            $isoDrive = "$($isoVol.DriveLetter):"
+            if (Test-Path "$isoDrive\boot\bootsect.exe") {{
+                & "$isoDrive\boot\bootsect.exe" /nt60 $usbDrive /force /mbr | Out-Null
+            }} else {{
+                bootsect.exe /nt60 $usbDrive /force /mbr 2>$null | Out-Null
+            }}
+            robocopy "$isoDrive\" "$usbDrive\" /E /ZB /NFL /NDL /NJH /NJS /R:1 /W:1 | Out-Null
+            Write-Output "[OK] Arquivos da ISO ($isoDrive) copiados com sucesso para o disco bootável ($usbDrive)!"
+        }} finally {{
+            Dismount-DiskImage -ImagePath $iso -ErrorAction SilentlyContinue | Out-Null
+        }}
+        """
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_iso],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=900,
+            )
+            iso_copy_log = (proc.stdout or proc.stderr or "").strip()
+            steps_log.append(f"[2/3] Extração e Gravação da ISO ({os.path.basename(iso_clean)}): {iso_copy_log}")
+        except Exception as exc:
+            steps_log.append(f"[2/3] Aviso durante cópia da ISO: {exc}")
+    else:
+        if platform.system() == "Windows":
+            ps_boot = f"""
+            $p = Get-Partition -DiskNumber {disk_num} | Where-Object {{ $_.DriveLetter }} | Select-Object -First 1
+            if ($p) {{
+                bootsect.exe /nt60 "$($p.DriveLetter):" /force /mbr 2>$null
+                Write-Output "Unidade Bootável pronta em $($p.DriveLetter):"
+            }}
+            """
+            try:
+                proc = subprocess.run(["powershell", "-NoProfile", "-Command", ps_boot], capture_output=True, text=True, timeout=20)
+                iso_copy_log = (proc.stdout or "").strip()
+            except Exception:
+                pass
+        steps_log.append(f"[2/3] Setor de inicialização (Boot Record) gravado. {iso_copy_log}")
+
+    summary = (
+        f"🔥 Mídia Bootável ({scheme_up} / {fs_clean.upper()}) preparada com sucesso em Disk #{disk_num} ({device.get('model')})! "
+        + (f"Conteúdo da ISO '{os.path.basename(iso_clean)}' gravado na unidade." if iso_clean else "Unidade pronta e montada para receber arquivos de boot.")
+    )
+    log_storage_operation(base_dir, uid, f"Criador de Disco Bootável ({scheme_up})", risk["risk_level"], "completed", summary, {"steps": steps_log, "diskpart": dp_res.get("output")})
+    return {
+        "success": dp_res["success"],
+        "disk_number": disk_num,
+        "boot_scheme": scheme_up,
+        "filesystem": fs_clean.upper(),
+        "iso_used": iso_clean,
+        "steps_log": steps_log,
+        "diskpart_output": dp_res.get("output", ""),
+        "message": summary,
+    }

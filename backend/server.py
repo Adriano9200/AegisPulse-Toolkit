@@ -77,6 +77,11 @@ from backend.services.storage_recovery import (
     inspect_and_recover_partitions,
     recover_files_assisted,
     execute_logical_repair,
+    force_unlock_and_revive_disk,
+    assign_or_change_drive_letter,
+    format_and_partition_disk,
+    execute_diskpart_action,
+    create_bootable_usb_drive,
 )
 from backend.services.gemini_ai import check_internet_connection, query_gemini_ai
 from backend.services.html_reporter import generate_html_report
@@ -626,6 +631,139 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             )
             log_action(f"Reparação Lógica ({mode})", res.get("message", ""))
             res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        # ==================== v5.0: CENTRAL SUPREMA DISKPART, DESBLOQUEIO, FORMATAÇÃO & BOOTÁVEL ====================
+        if route == "/api/storage/diskpart/unlock":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            init_raw = bool(body.get("initialize_if_raw", True))
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = force_unlock_and_revive_disk(base_dir=base_dir, device=dev, initialize_if_raw=init_raw)
+            updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
+            if SESSION_STATE.get("last_snapshot") and updated_st:
+                SESSION_STATE["last_snapshot"]["storage_suite"] = updated_st
+            res["storage_suite"] = updated_st
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            log_action("Desbloqueio Forçado de Disco", res.get("message", ""))
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/storage/diskpart/assign-letter":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            desired_letter = str(body.get("desired_letter", "AUTO"))
+            part_num = int(body.get("partition_number", 0))
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = assign_or_change_drive_letter(
+                base_dir=base_dir,
+                device=dev,
+                desired_letter=desired_letter,
+                partition_number=part_num,
+            )
+            updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
+            if SESSION_STATE.get("last_snapshot") and updated_st:
+                SESSION_STATE["last_snapshot"]["storage_suite"] = updated_st
+            res["storage_suite"] = updated_st
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            log_action(f"Atribuir Letra ({desired_letter})", res.get("message", ""))
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/storage/diskpart/format":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            fs = str(body.get("filesystem", "NTFS"))
+            label = str(body.get("volume_label", "AEGIS_DISK"))
+            quick = bool(body.get("quick_format", True))
+            p_style = str(body.get("partition_style", "GPT"))
+            full_rep = bool(body.get("full_repartition", False))
+            desired_letter = str(body.get("desired_letter", "AUTO"))
+            confirm_tok = str(body.get("confirm_token", ""))
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = format_and_partition_disk(
+                base_dir=base_dir,
+                device=dev,
+                filesystem=fs,
+                volume_label=label,
+                quick_format=quick,
+                partition_style=p_style,
+                full_repartition=full_rep,
+                desired_letter=desired_letter,
+                confirm_token=confirm_tok,
+            )
+            if res.get("success"):
+                updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
+                if SESSION_STATE.get("last_snapshot") and updated_st:
+                    SESSION_STATE["last_snapshot"]["storage_suite"] = updated_st
+                res["storage_suite"] = updated_st
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            log_action(f"Formatação DiskPart ({fs})", res.get("message", ""))
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/storage/diskpart/action":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            dp_action = str(body.get("action", "detail_disk"))
+            custom_scr = str(body.get("custom_script", ""))
+            sz_mb = int(body.get("size_mb", 0) or 0)
+            confirm_tok = str(body.get("confirm_token", ""))
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = execute_diskpart_action(
+                base_dir=base_dir,
+                device=dev,
+                action=dp_action,
+                custom_script=custom_scr,
+                size_mb=sz_mb,
+                confirm_token=confirm_tok,
+            )
+            if res.get("success") and dp_action != "detail_disk":
+                updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
+                if SESSION_STATE.get("last_snapshot") and updated_st:
+                    SESSION_STATE["last_snapshot"]["storage_suite"] = updated_st
+                res["storage_suite"] = updated_st
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            log_action(f"DiskPart ({dp_action})", res.get("message", ""))
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        if route == "/api/storage/diskpart/bootable":
+            disk_num = int(body.get("disk_number", 0))
+            dev_uid = str(body.get("device_uid", ""))
+            iso_path = str(body.get("iso_path", ""))
+            boot_scheme = str(body.get("boot_scheme", "UEFI_GPT"))
+            fs = str(body.get("filesystem", "NTFS"))
+            label = str(body.get("volume_label", "AEGIS_BOOT"))
+            confirm_tok = str(body.get("confirm_token", ""))
+            dev = _find_device_in_snapshot(disk_number=disk_num, device_uid=dev_uid)
+
+            res = create_bootable_usb_drive(
+                base_dir=base_dir,
+                device=dev,
+                iso_path=iso_path,
+                boot_scheme=boot_scheme,
+                filesystem=fs,
+                volume_label=label,
+                confirm_token=confirm_tok,
+            )
+            if res.get("success"):
+                updated_st = _safe_call(build_complete_storage_suite_payload, base_dir, default={})
+                if SESSION_STATE.get("last_snapshot") and updated_st:
+                    SESSION_STATE["last_snapshot"]["storage_suite"] = updated_st
+                res["storage_suite"] = updated_st
+            res["operations_log"] = list_storage_operations_log(base_dir, limit=35)
+            log_action(f"Criador Bootável ({boot_scheme})", res.get("message", ""))
             res["action_logs"] = SESSION_STATE["action_logs"]
             self._send_json(res)
             return

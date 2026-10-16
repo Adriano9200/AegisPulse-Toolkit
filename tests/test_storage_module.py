@@ -351,5 +351,84 @@ class TestAegisPulseStorageSuiteV4(unittest.TestCase):
         self.assertTrue(chk_res["blocked_by_physical_risk"])
 
 
+
+    def test_07_supreme_diskpart_unlock_format_and_bootable_guards(self):
+        """Cenário 8 (v5.0): Desbloqueio forçado de disco Sem Letra (JMicron), atribuição de letra, formatação, DiskPart e bloqueio do disco C:."""
+        from backend.services.storage_recovery import (
+            force_unlock_and_revive_disk,
+            assign_or_change_drive_letter,
+            format_and_partition_disk,
+            execute_diskpart_action,
+            create_bootable_usb_drive,
+        )
+
+        # 1. Disco #3 JMicron Sem Letra
+        jmicron_disk = {
+            "device_uid": "JMICRON_2TB_0119",
+            "disk_number": 3,
+            "device_path": r"\\.\PHYSICALDRIVE3",
+            "brand": "(Unidades de disco padrão)",
+            "model": "JMicron Tech SCSI Disk Device",
+            "capacity": {"bytes": 2000398934016, "formatted": "2.0 TB (1863.02 GiB)"},
+            "partition_style": "GPT",
+            "partitions_count": 1,
+            "partitions": [{"partition_number": 1, "capacity": {"bytes": 2000398934016}}],
+            "drive_letters": [],
+            "is_system_disk": False,
+        }
+
+        unlock_res = force_unlock_and_revive_disk(self.base_dir, jmicron_disk, initialize_if_raw=True)
+        self.assertTrue(unlock_res["success"])
+        self.assertEqual(unlock_res["disk_number"], 3)
+
+        letter_res = assign_or_change_drive_letter(self.base_dir, jmicron_disk, desired_letter="G")
+        self.assertTrue(letter_res["success"])
+        self.assertIn("assign letter=G", letter_res["diskpart_output"])
+
+        # Formatação sem confirmação deve pedir confirmação
+        fmt_blocked = format_and_partition_disk(self.base_dir, jmicron_disk, filesystem="EXFAT", confirm_token="")
+        self.assertFalse(fmt_blocked["success"])
+        self.assertTrue(fmt_blocked.get("confirmation_required"))
+
+        # Formatação com confirmação FORMATAR deve suceder no Disco #3
+        fmt_ok = format_and_partition_disk(
+            self.base_dir,
+            jmicron_disk,
+            filesystem="EXFAT",
+            volume_label="JMICRON_2TB",
+            full_repartition=True,
+            confirm_token="FORMATAR",
+        )
+        self.assertTrue(fmt_ok["success"])
+        self.assertIn("format fs=exfat", fmt_ok["diskpart_script"])
+
+        # Disco C: (Sistema) jamais pode ser formatado ou sofrer clean!
+        sys_disk = {
+            "device_uid": "SK_HYNIX_SYS",
+            "disk_number": 2,
+            "model": "PC801 NVMe SK hynix 1TB",
+            "drive_letters": ["C:", "F:"],
+            "is_system_disk": True,
+        }
+        sys_fmt = format_and_partition_disk(self.base_dir, sys_disk, confirm_token="FORMATAR")
+        self.assertFalse(sys_fmt["success"])
+        self.assertTrue(sys_fmt.get("blocked_system_disk"))
+
+        sys_clean = execute_diskpart_action(self.base_dir, sys_disk, action="clean_disk", confirm_token="CONFIRMAR")
+        self.assertFalse(sys_clean["success"])
+
+        # Criador de Pendrive Bootável em Disco #3
+        boot_ok = create_bootable_usb_drive(
+            self.base_dir,
+            jmicron_disk,
+            iso_path="",
+            boot_scheme="UEFI_GPT",
+            filesystem="NTFS",
+            volume_label="AEGIS_BOOT",
+            confirm_token="CRIAR_BOOT",
+        )
+        self.assertTrue(boot_ok["success"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

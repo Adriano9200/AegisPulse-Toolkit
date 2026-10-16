@@ -24,22 +24,96 @@ from backend.collectors.storage_advanced import _find_smartctl_binary
 from backend.services.storage_health import classify_storage_risk, log_storage_operation
 
 
+def _read_raw_disk_via_powershell(disk_num: int, dev_path: str, total_blocks: int, block_bytes: int) -> dict[str, Any] | None:
+    """Leitor bruto de setores físicos via .NET FileStream com FileShare.ReadWrite para discos Sem Letra / USB / RAW no Windows."""
+    if platform.system() != "Windows":
+        return None
+    raw_target = dev_path if dev_path.startswith("\\\\.\\") else f"\\\\.\\PhysicalDrive{disk_num}"
+    ps_cmd = f"""
+    $ErrorActionPreference = 'Stop'
+    $path = '{raw_target}'
+    $blockSize = {int(max(4096, (block_bytes // 4096) * 4096))}
+    $totalBlocks = {int(max(1, min(total_blocks, 64)))}
+    $latencies = @()
+    $samples = @()
+    $bytesReadTotal = 0L
+    $ioErrors = 0
+    $slowBlocks = 0
+    $healthyBlocks = 0
+    $errDetails = @()
+    try {{
+        $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $buf = New-Object byte[] $blockSize
+        for ($i = 0; $i -lt $totalBlocks; $i++) {{
+            $offset = [int64]$i * [int64]$blockSize
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            try {{
+                [void]$fs.Seek($offset, [System.IO.SeekOrigin]::Begin)
+                $read = $fs.Read($buf, 0, $blockSize)
+                $sw.Stop()
+                $lat = [math]::Round($sw.Elapsed.TotalMilliseconds, 2)
+                $latencies += $lat
+                $bytesReadTotal += $read
+                $spd = if ($lat -gt 0) {{ [math]::Round(($read / 1MB) / ($lat / 1000.0), 2) }} else {{ 500.0 }}
+                if ($lat -gt 150.0) {{ $slowBlocks++; $st = 'slow' }} else {{ $healthyBlocks++; $st = 'ok' }}
+                if ($samples.Count -lt 32) {{
+                    $samples += @{{ block = ($i + 1); offset_bytes = $offset; latency_ms = $lat; speed_mb_s = $spd; status = $st }}
+                }}
+            }} catch {{
+                $sw.Stop()
+                $ioErrors++
+                $errDetails += "Bloco #$($i+1): $($_.Exception.Message)"
+            }}
+        }}
+        $fs.Close()
+        @{{
+            ok = $true
+            bytes_examined = $bytesReadTotal
+            io_errors = $ioErrors
+            slow_blocks = $slowBlocks
+            healthy_blocks = $healthyBlocks
+            latencies = $latencies
+            samples = $samples
+            errors = $errDetails
+        }} | ConvertTo-Json -Depth 4 -Compress
+    }} catch {{
+        @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json -Compress
+    }}
+    """
+    try:
+        res = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=25,
+        )
+        if res.stdout.strip():
+            import json
+            return json.loads(res.stdout.strip())
+    except Exception:
+        pass
+    return None
+
+
 def _resolve_readable_target(device: dict[str, Any], target_override: str | None = None) -> tuple[str | None, str, int]:
     if target_override and os.path.exists(target_override):
         sz = os.path.getsize(target_override)
         return target_override, "Arquivo/Dispositivo Direto", sz
 
-    dev_path = str(device.get("device_path") or "")
+    disk_num = int(device.get("disk_number") or 0)
+    dev_path = str(device.get("device_path") or f"\\\\.\\PhysicalDrive{disk_num}")
     cap_bytes = int(device.get("capacity", {}).get("bytes") or 0)
 
     if platform.system() == "Windows" and dev_path.startswith("\\\\.\\"):
         try:
-            with open(dev_path, "rb") as f:
-                f.read(512)
-            return dev_path, f"Leitura Direta de Setores Físicos ({dev_path})", cap_bytes
-        except PermissionError:
-            pass
-        except OSError:
+            fd = os.open(dev_path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+            chunk = os.read(fd, 4096)
+            os.close(fd)
+            if chunk:
+                return dev_path, f"Leitura Direta de Setores Físicos ({dev_path})", cap_bytes
+        except Exception:
             pass
 
     letters = device.get("drive_letters") or []
@@ -163,29 +237,32 @@ def run_storage_integrity_test(
 
         if smartctl_bin and target_override is None:
             dev_arg = f"/dev/pd{disk_num}" if platform.system() == "Windows" else "/dev/sda"
-            try:
-                proc = subprocess.run(
-                    [smartctl_bin, "-t", st_arg, dev_arg],
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=10,
-                )
-                out_txt = (proc.stdout or proc.stderr or "").strip()
-                msg = f"{st_label} enviado ao controlador de {device.get('model')}. Saída: {out_txt[:220]}"
-                log_storage_operation(base_dir, uid, st_label, risk["risk_level"], "started", msg)
-                return {
-                    "success": True,
-                    "test_type": st_label,
-                    "started_at": started_at,
-                    "duration_sec": round(time.perf_counter() - t0, 2),
-                    "smartctl_used": True,
-                    "previous_self_tests": device.get("self_test_logs") or [],
-                    "message": msg,
-                }
-            except Exception:
-                pass
+            bridge_flags = [[], ["-d", "sat"], ["-d", "sntjmicron"], ["-d", "sntrealtek"], ["-d", "sntasmedia"], ["-d", "nvme"], ["-d", "scsi"]]
+            for bflags in bridge_flags:
+                try:
+                    proc = subprocess.run(
+                        [smartctl_bin, *bflags, "-t", st_arg, dev_arg],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=10,
+                    )
+                    out_txt = (proc.stdout or proc.stderr or "").strip()
+                    if "Testing has begun" in out_txt or "Self-test" in out_txt or proc.returncode == 0:
+                        msg = f"{st_label} iniciado no firmware de {device.get('model')} ({bflags or ['auto']}). Saída: {out_txt[:240]}"
+                        log_storage_operation(base_dir, uid, st_label, risk["risk_level"], "started", msg)
+                        return {
+                            "success": True,
+                            "test_type": st_label,
+                            "started_at": started_at,
+                            "duration_sec": round(time.perf_counter() - t0, 2),
+                            "smartctl_used": True,
+                            "previous_self_tests": device.get("self_test_logs") or [],
+                            "message": msg,
+                        }
+                except Exception:
+                    continue
 
         prev_logs = device.get("self_test_logs") or []
         msg = (
@@ -205,10 +282,50 @@ def run_storage_integrity_test(
         }
 
     target_path, target_desc, total_cap_bytes = _resolve_readable_target(device, target_override=target_override)
+    if not target_path and platform.system() == "Windows" and target_override is None:
+        disk_num = int(device.get("disk_number") or 0)
+        dev_path = str(device.get("device_path") or f"\\\\.\\PhysicalDrive{disk_num}")
+        ps_raw = _read_raw_disk_via_powershell(disk_num, dev_path, total_blocks=16 if test_type == "quick_health" else 64, block_bytes=max(4096, int(block_size_kb) * 1024))
+        if ps_raw and ps_raw.get("ok") and int(ps_raw.get("bytes_examined") or 0) > 0:
+            duration_sec = max(0.001, time.perf_counter() - t0)
+            bytes_ex = int(ps_raw.get("bytes_examined") or 0)
+            lats = [float(x) for x in (ps_raw.get("latencies") or [1.0])]
+            spd = round((bytes_ex / (1024 * 1024)) / duration_sec, 2)
+            avg_l = round(sum(lats) / len(lats), 2) if lats else 0.0
+            max_l = round(max(lats), 2) if lats else 0.0
+            io_err = int(ps_raw.get("io_errors") or 0)
+            slow_b = int(ps_raw.get("slow_blocks") or 0)
+            ok_b = int(ps_raw.get("healthy_blocks") or 0)
+            untested = max(0, total_cap_bytes - bytes_ex)
+            verdict = f"APROVADO (Acesso Físico Bruto {dev_path}): {ok_b} blocos lidos sem erros ({spd} MB/s | Latência média: {avg_l} ms)."
+            return {
+                "success": True,
+                "test_type": test_type,
+                "target_used": f"Acesso Bruto Direto ({dev_path})",
+                "started_at": started_at,
+                "duration_sec": round(duration_sec, 3),
+                "bytes_examined": bytes_ex,
+                "examined_mb": round(bytes_ex / (1024 * 1024), 2),
+                "untested_bytes": untested,
+                "untested_note": f"Examinados {round(bytes_ex / (1024 * 1024), 2)} MB diretamente em {dev_path} (Disco Sem Letra/RAW).",
+                "speed_mb_s": spd,
+                "avg_latency_ms": avg_l,
+                "max_latency_ms": max_l,
+                "iops_estimate": int(round((ok_b + slow_b) / duration_sec)),
+                "healthy_blocks_count": ok_b,
+                "slow_blocks_count": slow_b,
+                "io_errors_count": io_err,
+                "error_details": ps_raw.get("errors") or [],
+                "block_samples": ps_raw.get("samples") or [],
+                "risk_assessment": risk,
+                "status_badge": "ok" if io_err == 0 else "err",
+                "message": verdict,
+            }
+
     if not target_path:
         msg = (
             f"Não foi possível realizar leitura direta em {device.get('model')} ({target_desc}). "
-            "Verifique se a unidade está online ou execute o AegisPulse como Administrador para acesso bruto a \\\\.\\PhysicalDrive."
+            "Use o botão '⚡ Forçar Desbloqueio Total & Tornar Utilizável' logo abaixo na Central Suprema DiskPart para colocar o disco Online e atribuir uma Letra de Unidade automaticamente!"
         )
         log_storage_operation(base_dir, uid, f"Teste de Integridade ({test_type})", risk["risk_level"], "inaccessible", msg)
         return {
@@ -242,7 +359,7 @@ def run_storage_integrity_test(
         target_limit = min(file_size, max_bytes_to_read) if file_size > 0 else max_bytes_to_read
         total_blocks = max(1, target_limit // block_bytes)
 
-        with open(target_path, "rb") as f:
+        with open(target_path, "rb", buffering=0 if str(target_path).startswith("\\\\.\\") else -1) as f:
             for b_idx in range(int(total_blocks)):
                 offset = b_idx * block_bytes
                 bt0 = time.perf_counter()
