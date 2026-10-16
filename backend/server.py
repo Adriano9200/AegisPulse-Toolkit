@@ -1,98 +1,106 @@
-from concurrent.futures import ThreadPoolExecutor
-import sys
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 ================================================================================
 PROJETO: AegisPulse IT Toolkit
-ARQUIVO: backend/server.py (Servidor HTTP/REST API v4.0 com Storage Forensics)
+ARQUIVO: backend/server.py (Servidor HTTP/REST API v5.5 com Crash Investigator & PDF/HTML)
 AUTOR:   Adriano Barboza (adriano9200@gmail.com | WhatsApp: +55 61 98515-8434)
-VERSÃO:  4.0.0
+VERSÃO:  5.5.0
 ================================================================================
 """
 
-import json
-import mimetypes
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+import mimetypes
+import os
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+import sys
+from urllib.parse import parse_qs, unquote, urlparse
 
 from backend.auth import (
+    AUTHOR_WHATSAPP,
+    AUTHOR_WHATSAPP_URL,
+    consume_trial_scan,
+    generate_subscription_key,
+    get_session_info,
+    hash_pin,
+    load_config,
     login_admin,
     login_subscriber,
     login_trial,
-    get_session_info,
-    consume_trial_scan,
-    generate_subscription_key,
-    load_config,
     save_config,
-    hash_pin,
-    AUTHOR_WHATSAPP,
-    AUTHOR_WHATSAPP_URL,
 )
-from backend.collectors.hardware import collect_hardware_info
-from backend.collectors.os_info import collect_os_info
 from backend.collectors.drivers_bios import (
     collect_drivers_and_bios,
     scan_and_install_windows_driver_updates,
 )
+from backend.collectors.hardware import collect_hardware_info
+from backend.collectors.os_info import collect_os_info
 from backend.collectors.software import (
     collect_installed_software,
-    run_winget_action,
     remove_bloatware,
+    run_winget_action,
 )
-from backend.services.maintenance import run_maintenance_task
-from backend.services.network_tools import (
-    collect_network_diagnostics,
-    apply_dns_preset,
-    recover_wifi_passwords,
-    run_download_speedtest,
+from backend.services.admin_crm import (
+    FAIR_PRICING_CATALOG,
+    delete_crm_client,
+    list_crm_clients,
+    save_client_and_generate_report,
+)
+from backend.services.compatibility import analyze_hardware_compatibility
+from backend.services.crash_investigator import (
+    SAFE_CRASH_ACTIONS_CATALOG,
+    compare_crash_investigations,
+    execute_authorized_crash_action,
+    list_crash_investigations,
+    run_full_crash_investigation,
 )
 from backend.services.gaming_dll import (
     audit_gaming_and_dlls,
     run_gaming_optimization,
 )
-from backend.services.compatibility import analyze_hardware_compatibility
-from backend.services.admin_crm import (
-    FAIR_PRICING_CATALOG,
-    list_crm_clients,
-    delete_crm_client,
-    save_client_and_generate_report,
-)
+from backend.services.gemini_ai import check_internet_connection, query_gemini_ai
 from backend.services.health_score import (
+    compare_health_evaluations,
     compute_health_score,
     get_latest_health_score,
     list_health_score_history,
-    compare_health_evaluations,
 )
+from backend.services.html_reporter import generate_html_report
+from backend.services.maintenance import run_maintenance_task
+from backend.services.network_tools import (
+    apply_dns_preset,
+    collect_network_diagnostics,
+    recover_wifi_passwords,
+    run_download_speedtest,
+)
+from backend.services.storage_diagnostics import run_storage_integrity_test
 from backend.services.storage_health import (
     build_complete_storage_suite_payload,
     list_storage_operations_log,
 )
-from backend.services.storage_diagnostics import run_storage_integrity_test
 from backend.services.storage_recovery import (
-    create_or_resume_disk_image,
+    assign_or_change_drive_letter,
     cancel_active_clone_job,
-    inspect_and_recover_partitions,
-    recover_files_assisted,
+    create_bootable_usb_drive,
+    create_or_resume_disk_image,
+    execute_diskpart_action,
     execute_logical_repair,
     force_unlock_and_revive_disk,
-    assign_or_change_drive_letter,
     format_and_partition_disk,
-    execute_diskpart_action,
-    create_bootable_usb_drive,
+    inspect_and_recover_partitions,
+    recover_files_assisted,
 )
-from backend.services.gemini_ai import check_internet_connection, query_gemini_ai
-from backend.services.html_reporter import generate_html_report
 
 SESSION_STATE = {
     "base_dir": Path("."),
     "last_snapshot": {},
     "last_ai_analysis": "",
+    "last_crash_investigation": {},
     "action_logs": [],
 }
-
 
 
 def _safe_call(fn, *args, default=None, **kwargs):
@@ -140,7 +148,15 @@ def _find_device_in_snapshot(disk_number: int = 0, device_uid: str = "") -> dict
     dev, _ = _resolve_storage_device_strict(disk_number=disk_number, device_uid=device_uid)
     if dev:
         return dev
-    return {"device_uid": "", "disk_number": disk_number, "model": "Unknown", "serial_number": "UNKNOWN", "drive_letters": [], "capacity": {"bytes": 0}, "is_ambiguous_identity": True}
+    return {
+        "device_uid": "",
+        "disk_number": disk_number,
+        "model": "Unknown",
+        "serial_number": "UNKNOWN",
+        "drive_letters": [],
+        "capacity": {"bytes": 0},
+        "is_ambiguous_identity": True,
+    }
 
 
 class AegisPulseRequestHandler(BaseHTTPRequestHandler):
@@ -148,13 +164,24 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
         pass
 
     def _send_json(self, data: dict, status: int = 200) -> None:
-        raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        raw = json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Operator-Token")
         self.end_headers()
         self.wfile.write(raw)
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Operator-Token")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _get_token(self) -> str | None:
         return self.headers.get("X-Operator-Token")
@@ -185,6 +212,20 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
         return sess
 
     def do_GET(self):
+        try:
+            self._handle_get()
+        except Exception as exc:
+            self._send_json(
+                {
+                    "success": False,
+                    "error": "internal_server_error",
+                    "error_stage": "http_get_handler",
+                    "message": f"Erro interno no servidor (GET): {exc}",
+                },
+                status=500,
+            )
+
+    def _handle_get(self):
         parsed = urlparse(self.path)
         route = parsed.path
         qs = parse_qs(parsed.query)
@@ -193,22 +234,24 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
         if route == "/api/auth/status":
             cfg = load_config(base_dir)
             sess = get_session_info(base_dir, self._get_token())
-            self._send_json({
-                "require_pin": True,
-                "authorized": sess is not None,
-                "session": sess,
-                "trial_used": int(cfg.get("trial_scans_used", 0)),
-                "trial_limit": int(cfg.get("trial_limit", 4)),
-                "activated_license_key": cfg.get("activated_license_key", ""),
-                "author": "Adriano Barboza",
-                "whatsapp": AUTHOR_WHATSAPP,
-                "whatsapp_url": AUTHOR_WHATSAPP_URL,
-                "online": check_internet_connection(),
-                "has_gemini_key": bool(
-                    cfg.get("gemini_api_key")
-                    and cfg.get("gemini_api_key") != "COLE_SUA_GEMINI_API_KEY_AQUI"
-                ),
-            })
+            self._send_json(
+                {
+                    "require_pin": True,
+                    "authorized": sess is not None,
+                    "session": sess,
+                    "trial_used": int(cfg.get("trial_scans_used", 0)),
+                    "trial_limit": int(cfg.get("trial_limit", 4)),
+                    "activated_license_key": cfg.get("activated_license_key", ""),
+                    "author": "Adriano Barboza",
+                    "whatsapp": AUTHOR_WHATSAPP,
+                    "whatsapp_url": AUTHOR_WHATSAPP_URL,
+                    "online": check_internet_connection(),
+                    "has_gemini_key": bool(
+                        cfg.get("gemini_api_key")
+                        and cfg.get("gemini_api_key") != "COLE_SUA_GEMINI_API_KEY_AQUI"
+                    ),
+                }
+            )
             return
 
         if route == "/api/scan/full":
@@ -273,12 +316,13 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 "compatibility": compat,
                 "storage_suite": storage_suite,
                 "health_score": health_eval,
+                "crash_investigation": SESSION_STATE.get("last_crash_investigation") or {},
                 "pricing_catalog": FAIR_PRICING_CATALOG if updated_sess.get("role") == "admin" else [],
                 "action_logs": SESSION_STATE["action_logs"],
             }
             SESSION_STATE["last_snapshot"] = snapshot
             log_action(
-                f"Diagnóstico Completo & Health Score v4.5 ({updated_sess.get('role', 'user').upper()})",
+                f"Diagnóstico Completo & Health Score v5.5 ({updated_sess.get('role', 'user').upper()})",
                 f"Varredura executada em {hw.get('hostname')} ({storage_suite.get('total_physical_disks', 1)} disco(s) auditado(s) | {msg})",
             )
             self._send_json(snapshot)
@@ -289,7 +333,6 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 return
             latest = get_latest_health_score(base_dir)
             if not latest:
-                # Se não houver no banco, gera a partir do snapshot atual
                 snap = SESSION_STATE.get("last_snapshot") or {}
                 if not snap:
                     hw = collect_hardware_info()
@@ -332,17 +375,119 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                     eval_newer = items[0]
                     eval_older = items[0]
                 else:
-                    self._send_json({"success": False, "message": "Histórico insuficiente para comparação (mínimo de 1 avaliação)."}, status=400)
+                    self._send_json(
+                        {"success": False, "message": "Histórico insuficiente para comparação (mínimo de 1 avaliação)."},
+                        status=400,
+                    )
                     return
             else:
                 eval_older = next((it for it in items if str(it.get("id")) == str(older_id)), None)
                 eval_newer = next((it for it in items if str(it.get("id")) == str(newer_id)), None)
                 if not eval_older or not eval_newer:
-                    self._send_json({"success": False, "message": "Uma das avaliações solicitadas não foi encontrada no histórico."}, status=404)
+                    self._send_json(
+                        {"success": False, "message": "Uma das avaliações solicitadas não foi encontrada no histórico."},
+                        status=404,
+                    )
                     return
 
             diff = compare_health_evaluations(eval_older, eval_newer)
             self._send_json({"success": True, "comparison": diff})
+            return
+
+        # ==================== ROTAS GET: AEGISPULSE CRASH INVESTIGATOR (v5.5) ====================
+        if route == "/api/crash-investigator/run":
+            sess = self._require_auth()
+            if not sess:
+                return
+            period_days = int((qs.get("period_days") or [7])[0])
+            period_hours = int((qs.get("period_hours") or [period_days * 24])[0])
+            category = str((qs.get("category") or ["ALL"])[0])
+            severity = str((qs.get("severity") or ["ALL"])[0])
+            source = str((qs.get("source") or [""])[0])
+            equipment = str((qs.get("equipment") or [""])[0])
+            event_id_raw = (qs.get("event_id") or [""])[0]
+            event_id = int(event_id_raw) if str(event_id_raw).strip().isdigit() else None
+            ai_provider = str((qs.get("ai_provider") or ["local"])[0])
+
+            cfg = load_config(base_dir)
+            snap = SESSION_STATE.get("last_snapshot") or {}
+            res = run_full_crash_investigation(
+                base_dir=base_dir,
+                period_hours=period_hours,
+                severity_filter=severity,
+                category_filter=category,
+                source_filter=source,
+                event_id_filter=event_id,
+                equipment_filter=equipment,
+                snapshot=snap,
+                use_ai=ai_provider.lower() in ("gemini", "grok"),
+                ai_provider=ai_provider,
+                api_key=str(cfg.get("gemini_api_key") or ""),
+                grok_api_key=str(cfg.get("grok_api_key") or ""),
+                user_role=sess.get("role", "trial"),
+            )
+            SESSION_STATE["last_crash_investigation"] = res
+            if SESSION_STATE.get("last_snapshot"):
+                SESSION_STATE["last_snapshot"]["crash_investigation"] = res
+            inc_sum = res.get("incident_summary") or {}
+            log_action(
+                f"Crash Investigator ({period_hours}h | {category})",
+                f"{inc_sum.get('total_events_collected', 0)} evento(s), {inc_sum.get('bugcheck_count', 0)} BSOD(s), Severidade: {inc_sum.get('overall_severity')}",
+            )
+            self._send_json(
+                {
+                    "success": True,
+                    "crash_investigation": res,
+                    "safe_actions_catalog": SAFE_CRASH_ACTIONS_CATALOG,
+                    "action_logs": SESSION_STATE["action_logs"],
+                }
+            )
+            return
+
+        if route == "/api/crash-investigator/history":
+            if not self._require_auth():
+                return
+            limit = int((qs.get("limit") or [20])[0])
+            offset = int((qs.get("offset") or [0])[0])
+            ph_raw = (qs.get("period_hours") or [None])[0]
+            period_hours_f = int(ph_raw) if ph_raw and str(ph_raw).isdigit() else None
+            sev_f = str((qs.get("severity") or [""])[0])
+
+            hist = list_crash_investigations(
+                base_dir=base_dir,
+                limit=limit,
+                offset=offset,
+                period_hours_filter=period_hours_f,
+                severity_filter=sev_f,
+            )
+            self._send_json(hist)
+            return
+
+        if route == "/api/crash-investigator/compare":
+            if not self._require_auth():
+                return
+            older_id = (qs.get("older_id") or [None])[0]
+            newer_id = (qs.get("newer_id") or [None])[0]
+            hist = list_crash_investigations(base_dir=base_dir, limit=25)
+            items = hist.get("items") or []
+            if not items:
+                self._send_json({"success": False, "message": "Histórico insuficiente no SQLite para comparar períodos."}, status=400)
+                return
+            if older_id and newer_id:
+                eval_older = next((it for it in items if str(it.get("id")) == str(older_id)), None)
+                eval_newer = next((it for it in items if str(it.get("id")) == str(newer_id)), None)
+                if not eval_older or not eval_newer:
+                    self._send_json({"success": False, "message": "Investigações solicitadas não encontradas no SQLite."}, status=404)
+                    return
+            elif len(items) >= 2:
+                eval_newer = items[0]
+                eval_older = items[1]
+            else:
+                eval_newer = items[0]
+                eval_older = items[0]
+
+            comp = compare_crash_investigations(eval_older, eval_newer)
+            self._send_json({"success": True, "comparison": comp, **comp})
             return
 
         if route == "/api/storage/scan":
@@ -361,11 +506,13 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 return
             q = (qs.get("q") or [""])[0]
             clients = list_crm_clients(base_dir, search_query=q)
-            self._send_json({
-                "success": True,
-                "clients": clients,
-                "pricing_catalog": FAIR_PRICING_CATALOG,
-            })
+            self._send_json(
+                {
+                    "success": True,
+                    "clients": clients,
+                    "pricing_catalog": FAIR_PRICING_CATALOG,
+                }
+            )
             return
 
         if route == "/api/logs":
@@ -375,16 +522,33 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             return
 
         if route.startswith("/reports/"):
-            rel_name = route.replace("/reports/", "", 1)
-            target = (base_dir / "reports" / rel_name).resolve()
-            if target.exists() and target.is_file():
+            rel_name = os.path.basename(unquote(route.replace("/reports/", "", 1)))
+            reports_root = (base_dir / "reports").resolve()
+            target = (reports_root / rel_name).resolve()
+            if target.parent == reports_root and target.exists() and target.is_file():
                 content = target.read_bytes()
+                is_pdf = target.suffix.lower() == ".pdf"
+                is_dl = (qs.get("download") or ["0"])[0] in ("1", "true", "yes")
+                ctype = "application/pdf" if is_pdf else "text/html; charset=utf-8"
+                disp = "attachment" if is_dl else "inline"
                 self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(content)))
+                self.send_header("Content-Disposition", f'{disp}; filename="{target.name}"')
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(content)
                 return
+            self._send_json(
+                {
+                    "success": False,
+                    "error": "report_file_not_found",
+                    "error_stage": "file_delivery",
+                    "message": f"O arquivo de relatório solicitado ('{rel_name}') não foi encontrado em {reports_root}.",
+                },
+                status=404,
+            )
+            return
 
         frontend_dir = base_dir / "frontend"
         if not frontend_dir.exists() and getattr(sys, "_MEIPASS", None):
@@ -406,6 +570,20 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "not_found"}, status=404)
 
     def do_POST(self):
+        try:
+            self._handle_post()
+        except Exception as exc:
+            self._send_json(
+                {
+                    "success": False,
+                    "error": "internal_server_error",
+                    "error_stage": "http_post_handler",
+                    "message": f"Erro interno no servidor (POST): {exc}",
+                },
+                status=500,
+            )
+
+    def _handle_post(self):
         parsed = urlparse(self.path)
         route = parsed.path
         base_dir = SESSION_STATE["base_dir"]
@@ -466,11 +644,13 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
                 return
             save_config(base_dir, {"trial_scans_used": 0})
             log_action("ADM Reset Trial", "Contador de análises Trial zerado (0/4) pelo Administrador.")
-            self._send_json({
-                "success": True,
-                "message": "Contador Trial desta máquina foi zerado (0 de 4 análises usadas).",
-                "action_logs": SESSION_STATE["action_logs"],
-            })
+            self._send_json(
+                {
+                    "success": True,
+                    "message": "Contador Trial desta máquina foi zerado (0 de 4 análises usadas).",
+                    "action_logs": SESSION_STATE["action_logs"],
+                }
+            )
             return
 
         if route == "/api/admin/crm/save-and-quote":
@@ -493,18 +673,97 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             cid = int(body.get("client_id", 0))
             delete_crm_client(base_dir, cid)
             log_action("CRM SQLite", f"Registro de cliente #{cid} removido.")
-            self._send_json({
-                "success": True,
-                "clients": list_crm_clients(base_dir),
-                "action_logs": SESSION_STATE["action_logs"],
-            })
+            self._send_json(
+                {
+                    "success": True,
+                    "clients": list_crm_clients(base_dir),
+                    "action_logs": SESSION_STATE["action_logs"],
+                }
+            )
             return
 
         sess = self._require_auth()
         if not sess:
             return
 
-        # ==================== ROTAS DO MÓDULO DE DISCOS, SMART & RECUPERAÇÃO (v4.0) ====================
+        # ==================== ROTAS POST: AEGISPULSE CRASH INVESTIGATOR (v5.5) ====================
+        if route == "/api/crash-investigator/run":
+            period_days = int(body.get("period_days", 7) or 7)
+            period_hours = int(body.get("period_hours") or (period_days * 24))
+            category = str(body.get("category", "ALL") or "ALL")
+            severity = str(body.get("severity", "ALL") or "ALL")
+            source = str(body.get("source", "") or "")
+            equipment = str(body.get("equipment", "") or "")
+            event_id_raw = body.get("event_id")
+            event_id = int(event_id_raw) if event_id_raw is not None and str(event_id_raw).strip().isdigit() else None
+            ai_provider = str(body.get("ai_provider", "local") or "local")
+
+            cfg = load_config(base_dir)
+            api_key = str(body.get("api_key") or cfg.get("gemini_api_key") or "")
+            grok_key = str(body.get("grok_api_key") or cfg.get("grok_api_key") or "")
+            raw_override = body.get("raw_override") or body.get("mock_evidence")
+            if not isinstance(raw_override, dict):
+                raw_override = None
+
+            snap = dict(SESSION_STATE.get("last_snapshot") or {})
+            if isinstance(body.get("snapshot"), dict):
+                snap.update(body["snapshot"])
+
+            res = run_full_crash_investigation(
+                base_dir=base_dir,
+                period_hours=period_hours,
+                severity_filter=severity,
+                category_filter=category,
+                source_filter=source,
+                event_id_filter=event_id,
+                equipment_filter=equipment,
+                snapshot=snap,
+                use_ai=bool(body.get("use_ai")) or ai_provider.lower() in ("gemini", "grok"),
+                ai_provider=ai_provider,
+                api_key=api_key,
+                grok_api_key=grok_key,
+                user_role=sess.get("role", "trial"),
+                raw_override=raw_override,
+            )
+            SESSION_STATE["last_crash_investigation"] = res
+            if SESSION_STATE.get("last_snapshot"):
+                SESSION_STATE["last_snapshot"]["crash_investigation"] = res
+            inc_sum = res.get("incident_summary") or {}
+            log_action(
+                f"Crash Investigator ({period_hours}h | {category})",
+                f"Investigação concluída: {inc_sum.get('total_events_collected', 0)} evento(s), {inc_sum.get('bugcheck_count', 0)} BSOD(s), Severidade: {inc_sum.get('overall_severity')}",
+            )
+            self._send_json(
+                {
+                    "success": True,
+                    "crash_investigation": res,
+                    "safe_actions_catalog": SAFE_CRASH_ACTIONS_CATALOG,
+                    "action_logs": SESSION_STATE["action_logs"],
+                }
+            )
+            return
+
+        if route == "/api/crash-investigator/action":
+            action_id = str(body.get("action_id", ""))
+            confirm_token = str(body.get("confirm_token", ""))
+            inv_id_raw = body.get("investigation_id")
+            inv_id = int(inv_id_raw) if inv_id_raw is not None and str(inv_id_raw).isdigit() else None
+
+            res = execute_authorized_crash_action(
+                base_dir=base_dir,
+                action_id=action_id,
+                confirm_token=confirm_token,
+                investigation_id=inv_id,
+            )
+            log_action(
+                f"Ação N3 Crash Investigator ({action_id})",
+                res.get("message", ""),
+            )
+            res["action_logs"] = SESSION_STATE["action_logs"]
+            self._send_json(res)
+            return
+
+        # ==================== ROTAS DO MÓDULO DE DISCOS, SMART & RECUPERAÇÃO (v4.0+) ====================
         if route == "/api/health-score/evaluate":
             with ThreadPoolExecutor(max_workers=6) as pool:
                 f_hw = pool.submit(_safe_call, collect_hardware_info, default={})
@@ -535,7 +794,10 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             )
             if SESSION_STATE.get("last_snapshot"):
                 SESSION_STATE["last_snapshot"]["health_score"] = eval_res
-            log_action("Avaliação Health Score", f"Índice calculado: {eval_res['overall_score']}/100 ({eval_res['classification']}) — Cobertura: {eval_res['coverage']['percent']}%")
+            log_action(
+                "Avaliação Health Score",
+                f"Índice calculado: {eval_res['overall_score']}/100 ({eval_res['classification']}) — Cobertura: {eval_res['coverage']['percent']}%",
+            )
             self._send_json({"success": True, "health_score": eval_res, "action_logs": SESSION_STATE["action_logs"]})
             return
 
@@ -920,37 +1182,72 @@ class AegisPulseRequestHandler(BaseHTTPRequestHandler):
             return
 
         if route == "/api/report/generate":
-            snapshot = SESSION_STATE.get("last_snapshot")
-            if not snapshot:
-                hw = collect_hardware_info()
-                os_d = collect_os_info()
-                snapshot = {
-                    "hardware": hw,
-                    "os": os_d,
-                    "drivers_bios": collect_drivers_and_bios(),
-                    "software": collect_installed_software(),
-                    "gaming": audit_gaming_and_dlls(hardware=hw),
-                    "compatibility": analyze_hardware_compatibility(hw, os_d),
-                    "storage_suite": build_complete_storage_suite_payload(base_dir=base_dir),
-                }
-                SESSION_STATE["last_snapshot"] = snapshot
+            try:
+                client_snap = body.get("snapshot") if isinstance(body.get("snapshot"), dict) else None
+                snapshot = dict(SESSION_STATE.get("last_snapshot") or {})
+                if client_snap:
+                    for k, v in client_snap.items():
+                        if v is not None and not snapshot.get(k):
+                            snapshot[k] = v
+                if not snapshot:
+                    hw = _safe_call(collect_hardware_info, default={})
+                    os_d = _safe_call(collect_os_info, default={})
+                    snapshot = {
+                        "hardware": hw,
+                        "os": os_d,
+                        "drivers_bios": _safe_call(collect_drivers_and_bios, default={}),
+                        "software": _safe_call(collect_installed_software, default={}),
+                        "gaming": _safe_call(audit_gaming_and_dlls, hardware=hw, default={}),
+                        "compatibility": _safe_call(analyze_hardware_compatibility, hw, os_d, default={}),
+                        "storage_suite": _safe_call(build_complete_storage_suite_payload, base_dir=base_dir, default={}),
+                    }
+                    SESSION_STATE["last_snapshot"] = snapshot
 
-            res = generate_html_report(
-                snapshot=snapshot,
-                base_dir=base_dir,
-                ai_analysis=SESSION_STATE.get("last_ai_analysis", ""),
-                action_logs=SESSION_STATE["action_logs"],
-            )
-            if res.get("report_path") and sys.platform.startswith("win"):
-                try:
-                    import os as _os
-                    _os.startfile(res["report_path"])
-                except Exception:
-                    pass
-            log_action("Exportação de Laudo HTML v5.0", f"Arquivo gerado e aberto: {res.get('filename')}")
-            res["action_logs"] = SESSION_STATE["action_logs"]
-            self._send_json(res)
-            return
+                if isinstance(body.get("crash_investigation"), dict) and body.get("crash_investigation"):
+                    snapshot["crash_investigation"] = body["crash_investigation"]
+                elif SESSION_STATE.get("last_crash_investigation") and not snapshot.get("crash_investigation"):
+                    snapshot["crash_investigation"] = SESSION_STATE["last_crash_investigation"]
+
+                ai_text = str(body.get("ai_analysis") or SESSION_STATE.get("last_ai_analysis") or "")
+                out_dir_override = body.get("_test_output_dir")
+                target_base_dir = Path(out_dir_override) if out_dir_override else base_dir
+
+                if body.get("_simulate_generator_error"):
+                    raise RuntimeError("Falha interna simulada no motor de renderização de relatórios.")
+
+                res = generate_html_report(
+                    snapshot=snapshot,
+                    base_dir=target_base_dir,
+                    ai_analysis=ai_text,
+                    action_logs=SESSION_STATE["action_logs"],
+                )
+                if not res.get("success"):
+                    self._send_json(res, status=500)
+                    return
+
+                auto_open = bool(body.get("auto_open", True))
+                if auto_open and res.get("report_path") and sys.platform.startswith("win"):
+                    try:
+                        os.startfile(res["report_path"])
+                    except Exception:
+                        pass
+
+                log_action(
+                    "Exportação de Laudo HTML & PDF v5.5",
+                    f"Arquivos gerados: {res.get('filename')} ({res.get('html_size_bytes')} B) | {res.get('pdf_filename')} ({res.get('pdf_size_bytes')} B)",
+                )
+                res["action_logs"] = SESSION_STATE["action_logs"]
+                self._send_json(res, status=200)
+                return
+            except Exception as rep_exc:
+                err_payload = {
+                    "success": False,
+                    "error": "report_generation_failed",
+                    "error_stage": "internal_generator_exception",
+                    "message": f"Erro interno ao gerar laudo HTML/PDF: {rep_exc}",
+                }
+                self._send_json(err_payload, status=500)
+                return
 
         if route == "/api/config/update":
             updates = {}

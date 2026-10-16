@@ -13,6 +13,9 @@ let SELECTED_STORAGE_INDEX = 0;
 let SELECTED_STORAGE_UID = "";
 let CURRENT_HEALTH_SCORE = null;
 let CURRENT_FINDINGS_FILTER = "TODOS";
+let CURRENT_CRASH_INVESTIGATION = null;
+let CURRENT_AI_ANALYSIS_TEXT = "";
+let IS_GENERATING_REPORT = false;
 
 function showToast(msg) {
     const t = document.getElementById("statusToast");
@@ -72,8 +75,29 @@ async function apiFetch(path, options = {}) {
     if (OPERATOR_TOKEN) {
         headers["X-Operator-Token"] = OPERATOR_TOKEN;
     }
-    const resp = await fetch(path, { ...options, headers });
-    const data = await resp.json();
+
+    let resp;
+    try {
+        resp = await fetch(path, { ...options, headers });
+    } catch (netErr) {
+        const err = new Error(
+            `Falha de conexão com o servidor local AegisPulse (${path}). Verifique se o servidor Python está ativo na porta configurada (${netErr.message || "Failed to fetch"}).`
+        );
+        err.errorStage = "connection_failure";
+        throw err;
+    }
+
+    let data = null;
+    try {
+        data = await resp.json();
+    } catch (parseErr) {
+        const err = new Error(
+            `Resposta inválida do servidor (HTTP ${resp.status} em ${path}): formato JSON inesperado.`
+        );
+        err.errorStage = "invalid_response_format";
+        err.httpStatus = resp.status;
+        throw err;
+    }
 
     if (resp.status === 401 || resp.status === 402) {
         const errEl = document.getElementById("authError");
@@ -82,7 +106,20 @@ async function apiFetch(path, options = {}) {
             errEl.classList.remove("hidden");
         }
         document.getElementById("authModal").classList.remove("hidden");
-        throw new Error(data.message || "Sessão bloqueada");
+        const authErr = new Error(data.message || "Sessão bloqueada");
+        authErr.errorStage = "auth_required";
+        authErr.httpStatus = resp.status;
+        throw authErr;
+    }
+
+    if (resp.status >= 400) {
+        const stage = (data && data.error_stage) ? data.error_stage : (resp.status === 404 ? "route_not_found" : "http_error");
+        const msg = (data && data.message) ? data.message : `Erro HTTP ${resp.status} (${data?.error || "falha na requisição"})`;
+        const httpErr = new Error(msg);
+        httpErr.errorStage = stage;
+        httpErr.httpStatus = resp.status;
+        httpErr.payload = data;
+        throw httpErr;
     }
 
     syncActionLogs(data);
@@ -828,12 +865,17 @@ async function runStorageTest(testType, confirmWrite = "") {
 
 function runStorageWriteTestPrompt() {
     const dev = getSelectedStorageDevice();
+    if (!dev) {
+        showToast("Selecione um dispositivo de armazenamento.");
+        return;
+    }
     const ok = confirm(
-        `⚠️ TESTE DE ESCRITA E VERIFICAÇÃO EM: Disk #${dev ? dev.disk_number : ''} (${dev ? dev.model : ''})\n\n` +
-        `Deseja autorizar e forçar o teste controlado de escrita não-destrutiva nesta unidade (mesmo se houver alerta SMART)?`
+        `⚠️ TESTE CONTROLADO DE ESCRITA EM: Disk #${dev.disk_number} (${dev.model} — ${dev.capacity?.formatted || ''})\n\n` +
+        `O teste grava blocos controlados em arquivo temporário para medir throughput real (MB/s) e latência (ms).\n\n` +
+        `Deseja autorizar expressamente este teste de escrita nesta unidade?`
     );
     if (ok) {
-        runStorageTest("write_verify", "CONFIRMAR_ESCRITA_RISCO_DADOS");
+        runStorageTest("write_verify", "AUTORIZAR_ESCRITA");
     }
 }
 
@@ -1313,6 +1355,9 @@ document.getElementById("btnAskGemini").addEventListener("click", async () => {
             grok_api_key: grokKey
         })
     });
+    if (res && res.response_text) {
+        CURRENT_AI_ANALYSIS_TEXT = res.response_text;
+    }
     out.textContent = res.response_text || `[AVISO] ${res.message}`;
     showToast(res.message || "Diagnóstico IA finalizado.");
 });
@@ -1329,30 +1374,122 @@ document.getElementById("btnSaveConfig").addEventListener("click", async () => {
     showToast(res.message || "Configurações salvas.");
 });
 
-// Exportar Laudo HTML / PDF
+// Exportar Laudo HTML / PDF (v5.5 — Prioridade 0: Sem Failed to fetch, com HTML + PDF binário real e diferenciação de etapas)
 async function exportHtmlReport() {
-    showToast("📄 Gerando e abrindo Laudo Técnico Executivo HTML/PDF v5.0...");
+    if (IS_GENERATING_REPORT) {
+        showToast("⏳ A geração do laudo HTML/PDF já está em andamento. Aguarde a conclusão...");
+        return;
+    }
+    IS_GENERATING_REPORT = true;
+
+    const btns = [
+        document.getElementById("btnExportHtml"),
+        document.getElementById("btnExportHtmlTab"),
+        document.getElementById("btnExportCrashReport")
+    ].filter(Boolean);
+    btns.forEach(b => { b.disabled = true; });
+
+    showToast("📄 Gerando Laudo Técnico Executivo em HTML e PDF v5.5...");
+
+    const statusBoxes = [
+        document.getElementById("reportStatusBox"),
+        document.getElementById("crashReportStatusBox")
+    ].filter(Boolean);
+
+    statusBoxes.forEach(box => {
+        box.innerHTML = `
+            <div style="padding:10px;background:rgba(56,189,248,0.10);border:1px solid #38bdf8;border-radius:8px;font-size:13px;">
+                ⏳ <strong>Processando Laudo Técnico HTML &amp; PDF...</strong> Validando dados, renderizando template e construindo documento PDF...
+            </div>
+        `;
+    });
+
     try {
-        const res = await apiFetch("/api/report/generate", { method: "POST" });
-        if (res && res.success) {
-            const rBox = document.getElementById("reportStatusBox");
-            if (rBox) {
-                rBox.innerHTML = `
-                    <div style="padding:10px;background:rgba(16,185,129,0.12);border:1px solid #10b981;border-radius:8px;">
-                        <strong style="color:#10b981;">✅ Laudo Gerado e Aberto no Navegador!</strong><br>
-                        <span>Arquivo salvo em: <code>${res.report_path}</code></span><br>
-                        <div style="margin-top:8px;display:flex;gap:8px;">
-                            <a href="${res.url}" target="_blank" class="btn primary" style="text-decoration:none;display:inline-block;">🌐 Abrir Laudo HTML</a>
-                            <a href="${res.url}" download="${res.filename || 'Laudo_AegisPulse.html'}" class="btn secondary" style="text-decoration:none;display:inline-block;">⬇️ Baixar Cópia do Laudo</a>
-                        </div>
-                    </div>
-                `;
-            }
-            showToast(`✅ Laudo aberto automaticamente e salvo em: ${res.report_path}`);
-            syncActionLogs(res);
+        const payload = {
+            ai_analysis: CURRENT_AI_ANALYSIS_TEXT || "",
+            crash_investigation: CURRENT_CRASH_INVESTIGATION || null,
+            snapshot: CURRENT_SNAPSHOT || null,
+            auto_open: true
+        };
+
+        const res = await apiFetch("/api/report/generate", {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+
+        if (!res || !res.success) {
+            const err = new Error(res?.message || "O gerador de relatórios retornou falha sem detalhes.");
+            err.errorStage = res?.error_stage || "generator_failure";
+            throw err;
         }
+
+        if (!res.url || !res.html_size_bytes || res.html_size_bytes < 100) {
+            const err = new Error("O conteúdo HTML produzido está vazio ou incompleto.");
+            err.errorStage = "html_validation";
+            throw err;
+        }
+
+        const pdfUrl = res.pdf_url || "";
+        const dlHtmlUrl = res.download_html_url || `${res.url}?download=1`;
+        const dlPdfUrl = res.download_pdf_url || (pdfUrl ? `${pdfUrl}?download=1` : "");
+        const fallbackBadge = res.used_basic_fallback
+            ? `<div style="margin-top:6px;color:#fbbf24;font-size:12px;">ℹ️ <strong>Nota:</strong> Gerado com resumo técnico determinístico local (análise de IA em nuvem não havia sido executada antes da exportação).</div>`
+            : "";
+
+        const successHtml = `
+            <div style="padding:12px;background:rgba(16,185,129,0.12);border:1px solid #10b981;border-radius:8px;">
+                <strong style="color:#10b981;font-size:14px;">✅ Laudo Técnico HTML &amp; PDF Gerado e Validado com Sucesso!</strong><br>
+                <span style="font-size:12.5px;">HTML: <code>${res.report_path}</code> (${(res.html_size_bytes || 0).toLocaleString()} bytes)</span><br>
+                ${res.pdf_path ? `<span style="font-size:12.5px;">PDF: <code>${res.pdf_path}</code> (${(res.pdf_size_bytes || 0).toLocaleString()} bytes)</span><br>` : ""}
+                ${fallbackBadge}
+                <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">
+                    <a href="${res.url}" target="_blank" rel="noopener" class="btn primary" style="text-decoration:none;display:inline-block;">🌐 Abrir Laudo HTML</a>
+                    ${pdfUrl ? `<a href="${pdfUrl}" target="_blank" rel="noopener" class="btn primary" style="background:#0ea5e9;text-decoration:none;display:inline-block;">📑 Abrir Laudo PDF</a>` : ""}
+                    <a href="${dlHtmlUrl}" download="${res.filename || "Laudo_AegisPulse.html"}" class="btn secondary" style="text-decoration:none;display:inline-block;">⬇️ Baixar HTML</a>
+                    ${dlPdfUrl ? `<a href="${dlPdfUrl}" download="${res.pdf_filename || "Laudo_AegisPulse.pdf"}" class="btn secondary" style="text-decoration:none;display:inline-block;">⬇️ Baixar PDF</a>` : ""}
+                </div>
+            </div>
+        `;
+
+        statusBoxes.forEach(box => { box.innerHTML = successHtml; });
+
+        // Tenta abrir em nova aba se o navegador permitir (sem falhar em PyWebView)
+        try {
+            window.open(res.url, "_blank");
+        } catch (openErr) {
+            console.warn("Abertura automática via window.open bloqueada ou gerenciada pelo os.startfile:", openErr);
+        }
+
+        showToast(`✅ Laudo HTML (${res.filename}) e PDF (${res.pdf_filename || "PDF"}) gerados com sucesso!`);
+        syncActionLogs(res);
     } catch (e) {
-        showToast("❌ Erro ao gerar relatório: " + e.message);
+        const stage = e.errorStage || "unknown_error";
+        const stageLabels = {
+            connection_failure: "Falha de Conexão com Servidor Local",
+            route_not_found: "Rota HTTP Inexistente (404)",
+            http_error: `Erro HTTP (${e.httpStatus || 500})`,
+            input_validation: "Falha na Validação dos Dados de Entrada",
+            output_dir_permission: "Falha de Permissão no Diretório de Saída",
+            html_render: "Falha na Renderização do Template HTML",
+            html_validation: "Falha na Validação do Conteúdo HTML",
+            file_write_permission: "Falha de Escrita/Permissão no Disco",
+            pdf_generation: "Falha na Geração do Documento PDF",
+            pdf_write: "Falha ao Gravar Arquivo PDF",
+            file_delivery: "Falha na Entrega do Arquivo",
+            internal_generator_exception: "Exceção Interna no Motor de Relatórios"
+        };
+        const stageTitle = stageLabels[stage] || `Erro na Etapa [${stage}]`;
+        const errHtml = `
+            <div style="padding:12px;background:rgba(239,68,68,0.12);border:1px solid #ef4444;border-radius:8px;color:#fca5a5;">
+                <strong style="color:#ef4444;">❌ ${stageTitle}</strong><br>
+                <span style="font-size:12.5px;">${e.message}</span>
+            </div>
+        `;
+        statusBoxes.forEach(box => { box.innerHTML = errHtml; });
+        showToast(`❌ [${stageTitle}]: ${e.message}`);
+    } finally {
+        IS_GENERATING_REPORT = false;
+        btns.forEach(b => { b.disabled = false; });
     }
 }
 
@@ -1869,25 +2006,42 @@ async function runDiskpartAssignLetter() {
 
 async function runDiskpartFormat() {
     const dev = getSelectedStorageDevice();
-    if (!dev) return;
+    if (!dev) {
+        showToast("Selecione um disco para formatar.");
+        return;
+    }
     const fs = document.getElementById("dpFormatFsSelect")?.value || "NTFS";
     const style = document.getElementById("dpFormatStyleSelect")?.value || "GPT";
     const label = document.getElementById("dpFormatLabelInput")?.value || "AEGIS_DISK";
     const quick = document.getElementById("dpFormatQuickCheckbox")?.checked ?? true;
     const fullRep = document.getElementById("dpFormatFullRepartitionCheckbox")?.checked ?? true;
     const letter = "AUTO";
-    let confirmTok = document.getElementById("dpFormatConfirmInput")?.value || "";
+    const inp = document.getElementById("dpFormatConfirmInput");
+    let confirmTok = (inp?.value || "").trim();
 
-    if (confirmTok.trim().toUpperCase() !== "FORMATAR") {
-        const p = prompt(
-            `⚠️ ATENÇÃO: Você está prestes a formatar o Disco #${dev.disk_number} (${dev.brand} ${dev.model} — ${dev.capacity?.formatted || ''}) em ${fs} (${style}).\n\n` +
-            `Todos os dados desta unidade serão apagados e ela receberá uma letra de unidade limpa.\n` +
-            `Digite exatamente FORMATAR para confirmar:`
-        );
-        if (!p) return;
-        confirmTok = p.trim();
-        const inp = document.getElementById("dpFormatConfirmInput");
-        if (inp) inp.value = confirmTok;
+    if (confirmTok.toUpperCase() !== "FORMATAR") {
+        let p = null;
+        try {
+            p = prompt(
+                `⚠️ ATENÇÃO: Formatar o Disco #${dev.disk_number} (${dev.brand || ''} ${dev.model} — ${dev.capacity?.formatted || ''}) em ${fs} (${style})?\n\n` +
+                `Todos os dados desta unidade serão apagados e ela receberá uma partição limpa.\n\n` +
+                `Digite exatamente FORMATAR para confirmar:`
+            );
+        } catch (e) {
+            p = null;
+        }
+        if (p && p.trim().toUpperCase() === "FORMATAR") {
+            confirmTok = "FORMATAR";
+            if (inp) inp.value = "FORMATAR";
+        } else {
+            if (inp) {
+                inp.focus();
+                inp.placeholder = "DIGITE FORMATAR AQUI";
+                inp.style.borderColor = "#ef4444";
+            }
+            showToast("⚠️ Digite FORMATAR no campo de confirmação e clique no botão para autorizar.");
+            return;
+        }
     }
 
     showToast(`💿 Formatando Disk #${dev.disk_number} (${dev.model}) em ${fs} e atribuindo letra... aguarde!`);
@@ -1991,24 +2145,41 @@ async function runDiskpartCustomScript() {
 
 async function runCreateBootableDrive() {
     const dev = getSelectedStorageDevice();
-    if (!dev) return;
+    if (!dev) {
+        showToast("Selecione um disco para criar mídia bootável.");
+        return;
+    }
     const scheme = document.getElementById("dpBootSchemeSelect")?.value || "UEFI_GPT";
     const fs = document.getElementById("dpBootFsSelect")?.value || "NTFS";
     const label = document.getElementById("dpBootLabelInput")?.value || "AEGIS_BOOT";
-    const isoPath = document.getElementById("dpBootIsoPathInput")?.value || "";
-    let confirmTok = document.getElementById("dpBootConfirmInput")?.value || "";
+    const isoPath = (document.getElementById("dpBootIsoPathInput")?.value || "").trim();
+    const inp = document.getElementById("dpBootConfirmInput");
+    let confirmTok = (inp?.value || "").trim();
 
-    if (!["CRIAR_BOOT", "FORMATAR", "CONFIRMAR"].includes(confirmTok.trim().toUpperCase())) {
-        const p = prompt(
-            `🚀 CRIADOR DE MÍDIA BOOTÁVEL (${scheme} / ${fs}):\n` +
-            `Alvo: Disco #${dev.disk_number} (${dev.brand} ${dev.model} — ${dev.capacity?.formatted || ''})\n` +
-            (isoPath ? `ISO: ${isoPath}\n` : `Modo: Preparar Partição de Boot Ativa + Setor NT60\n`) +
-            `\nDigite CRIAR_BOOT ou FORMATAR para autorizar:`
-        );
-        if (!p) return;
-        confirmTok = p.trim();
-        const inp = document.getElementById("dpBootConfirmInput");
-        if (inp) inp.value = confirmTok;
+    if (!["CRIAR_BOOT", "FORMATAR", "CONFIRMAR"].includes(confirmTok.toUpperCase())) {
+        let p = null;
+        try {
+            p = prompt(
+                `🚀 CRIADOR DE MÍDIA BOOTÁVEL (${scheme} / ${fs}):\n` +
+                `Alvo: Disco #${dev.disk_number} (${dev.brand || ''} ${dev.model} — ${dev.capacity?.formatted || ''})\n` +
+                (isoPath ? `ISO: ${isoPath}\n` : `Modo: Preparar Partição de Boot Ativa + Setor NT60\n`) +
+                `\nDigite CRIAR_BOOT ou FORMATAR para autorizar:`
+            );
+        } catch (e) {
+            p = null;
+        }
+        if (p && ["CRIAR_BOOT", "FORMATAR", "CONFIRMAR"].includes(p.trim().toUpperCase())) {
+            confirmTok = p.trim().toUpperCase();
+            if (inp) inp.value = confirmTok;
+        } else {
+            if (inp) {
+                inp.focus();
+                inp.placeholder = "DIGITE CRIAR_BOOT AQUI";
+                inp.style.borderColor = "#ec4899";
+            }
+            showToast("⚠️ Digite CRIAR_BOOT ou FORMATAR no campo de confirmação e clique no botão para autorizar.");
+            return;
+        }
     }
 
     showToast(`🚀 Criando estrutura bootável (${scheme}) em Disk #${dev.disk_number}... aguarde!`);
@@ -2036,3 +2207,431 @@ async function runCreateBootableDrive() {
         if (box) box.textContent = `❌ Erro ao criar mídia bootável: ${e.message}`;
     }
 }
+
+
+// ============================================================================
+// v5.5 — AEGISPULSE CRASH INVESTIGATOR (EVENTOS, BSOD, CONFIABILIDADE, I/O, IA & PLANO N3)
+// ============================================================================
+
+async function runCrashInvestigation() {
+    const btn = document.getElementById("btnRunCrashInvestigation");
+    const banner = document.getElementById("crashLimitationsBanner");
+    const periodDays = parseInt(document.getElementById("crashPeriodSelect")?.value || "7", 10);
+    const category = document.getElementById("crashCategorySelect")?.value || "ALL";
+    const severity = document.getElementById("crashSeveritySelect")?.value || "ALL";
+    const source = (document.getElementById("crashSourceInput")?.value || "").trim();
+    const eventIdRaw = (document.getElementById("crashEventIdInput")?.value || "").trim();
+    const aiProvider = document.getElementById("crashAiProviderSelect")?.value || "local";
+
+    if (btn) btn.disabled = true;
+    if (banner) {
+        banner.style.borderColor = "#38bdf8";
+        banner.innerHTML = `⏳ <strong>Coletando e correlacionando evidências reais do Windows...</strong> Lendo canais System/Application/WHEA/Kernel-Power, inspecionando Minidumps, Reliability Monitor e cruzando com telemetria SMART/I/O (${periodDays} dias)...`;
+    }
+    showToast(`🔍 Executando AegisPulse Crash Investigator (Período: ${periodDays} dias | Categoria: ${category})...`);
+
+    try {
+        const res = await apiFetch("/api/crash-investigator/run", {
+            method: "POST",
+            body: JSON.stringify({
+                period_days: periodDays,
+                period_hours: periodDays * 24,
+                category: category,
+                severity: severity,
+                source: source,
+                event_id: eventIdRaw ? parseInt(eventIdRaw, 10) : null,
+                use_ai: aiProvider !== "local",
+                ai_provider: aiProvider,
+                api_key: document.getElementById("cfgGeminiKey")?.value || "",
+                grok_api_key: document.getElementById("cfgGrokKey")?.value || ""
+            })
+        });
+
+        if (res && res.crash_investigation) {
+            CURRENT_CRASH_INVESTIGATION = res.crash_investigation;
+            if (CURRENT_SNAPSHOT) {
+                CURRENT_SNAPSHOT.crash_investigation = res.crash_investigation;
+            }
+            renderCrashInvestigatorTab(res.crash_investigation, res.safe_actions_catalog || {});
+            loadCrashInvestigatorHistory();
+            const tot = res.crash_investigation.incident_summary?.total_events_collected || 0;
+            showToast(`✅ Investigação concluída: ${tot} evento(s) analisado(s)!`);
+        }
+    } catch (e) {
+        if (banner) {
+            banner.style.borderColor = "#ef4444";
+            banner.innerHTML = `❌ <strong>Falha ao executar Crash Investigator:</strong> ${e.message}`;
+        }
+        showToast(`❌ Erro no Crash Investigator: ${e.message}`);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function renderCrashInvestigatorTab(inv, safeCatalogObj = {}) {
+    if (!inv) return;
+    const sum = inv.incident_summary || {};
+    const lims = inv.limitations_and_gaps || [];
+    const bsod = inv.bsod_analysis || {};
+    const rel = inv.reliability_history || {};
+    const ioCorr = inv.hardware_io_correlation || {};
+    const ec = ioCorr.counts || {};
+
+    // 0. Banner de Cobertura e Limitações
+    const banner = document.getElementById("crashLimitationsBanner");
+    if (banner) {
+        const limItems = lims.map(l => `<li>${l}</li>`).join("");
+        banner.style.borderColor = lims.length ? "#f59e0b" : "#10b981";
+        banner.innerHTML = `
+            <div class="flex-between" style="flex-wrap:wrap;gap:6px;">
+                <div><strong>🔎 Coleta Concluída em:</strong> <code>${inv.collected_at || "—"}</code> | <strong>Host:</strong> <code>${inv.hostname || "Local"}</code> | <strong>ID:</strong> <code>${inv.machine_uuid || "—"}</code></div>
+                <div><span class="badge ${sum.overall_severity === "CRÍTICO" ? "err" : (sum.overall_severity === "NORMAL" ? "ok" : "warn")}">SEVERIDADE: ${sum.overall_severity || "NORMAL"}</span></div>
+            </div>
+            <div style="margin-top:4px;color:#e2e8f0;">${sum.headline || ""}</div>
+            ${limItems ? `<ul style="margin:6px 0 0 18px;padding:0;color:#fde68a;font-size:12px;">${limItems}</ul>` : ""}
+        `;
+    }
+
+    // 1. KPIs
+    const stEl = document.getElementById("crashKpiStatus");
+    if (stEl) {
+        stEl.textContent = sum.overall_severity || "NORMAL";
+        stEl.style.color = sum.overall_severity === "CRÍTICO" ? "#ef4444" : (sum.overall_severity === "ALTO" ? "#f97316" : (sum.overall_severity === "MODERADO" ? "#f59e0b" : "#10b981"));
+    }
+    const perEl = document.getElementById("crashKpiPeriod");
+    if (perEl) perEl.textContent = `Janela: ${inv.period_days || 7} dia(s) (${inv.period_hours || 168}h)`;
+
+    const evCntEl = document.getElementById("crashKpiEventsCount");
+    if (evCntEl) evCntEl.textContent = `${sum.total_events_collected || 0} (${sum.critical_events_count || 0} Críticos / ${sum.error_events_count || 0} Erros)`;
+    const evRateEl = document.getElementById("crashKpiEventsRate");
+    const rate24 = (((sum.total_events_collected || 0) / Math.max(1, inv.period_hours || 168)) * 24).toFixed(2);
+    if (evRateEl) evRateEl.textContent = `Taxa normalizada: ${rate24} ev/24h`;
+
+    const bsodCntEl = document.getElementById("crashKpiBsodCount");
+    if (bsodCntEl) bsodCntEl.textContent = `${sum.bugcheck_count || 0} BSOD(s) | ${ec.kernel_power_41 || 0} Kernel-Power 41`;
+    const dumpEl = document.getElementById("crashKpiDumpFiles");
+    if (dumpEl) dumpEl.textContent = `Dumps em disco: ${sum.minidump_files_count || 0} arquivo(s)`;
+
+    const ioTotal = (ec.event_51_paging || 0) + (ec.event_129_storport_reset || 0) + (ec.event_153_io_retry || 0) + (ec.event_7_154_media_hw || 0);
+    const ioWheaEl = document.getElementById("crashKpiIoWhea");
+    if (ioWheaEl) ioWheaEl.textContent = `${ioTotal} I/O | ${ec.whea_events || 0} WHEA`;
+    const protEl = document.getElementById("crashKpiRiskProtection");
+    if (protEl) {
+        protEl.innerHTML = sum.data_protection_priority
+            ? `<strong style="color:#ef4444;">🚨 PRIORIZAR BACKUP IMEDIATO</strong>`
+            : `✅ Sem bloqueio físico imediato`;
+    }
+
+    const relEl = document.getElementById("crashKpiReliability");
+    if (relEl) relEl.textContent = `${rel.total_records || 0} registro(s) | ${rel.app_failures_count || 0} quedas app`;
+    const chgEl = document.getElementById("crashKpiChanges");
+    if (chgEl) chgEl.textContent = `Updates/Instalações próximas: ${rel.installations_updates_count || 0}`;
+
+    // 2. Hipóteses
+    const hyps = inv.hypotheses || [];
+    const hypBadge = document.getElementById("crashHypothesesCountBadge");
+    if (hypBadge) hypBadge.textContent = `${hyps.length} hipótese(s)`;
+
+    const hypTbody = document.getElementById("crashHypothesesTableBody");
+    if (hypTbody) {
+        hypTbody.innerHTML = hyps.length ? hyps.map((h, i) => {
+            const pScore = h.plausibility_score || 0;
+            const bCls = pScore >= 75 ? "err" : (pScore >= 50 ? "warn" : "ok");
+            const favHtml = (h.favorable_evidence || []).map(e => `<li>${e}</li>`).join("");
+            const conHtml = (h.contrary_evidence || []).map(e => `<li>${e}</li>`).join("");
+            return `
+            <tr>
+                <td><strong>#${h.rank || (i + 1)} — ${h.title}</strong><br><small class="muted">Categoria: ${h.category || "Sistema"}</small></td>
+                <td><span class="badge ${bCls}">${pScore}%</span></td>
+                <td><strong>${h.confidence_level || "Média"}</strong><br><small class="muted">${h.confidence_justification || ""}</small></td>
+                <td><ul style="margin:0;padding-left:16px;font-size:12px;">${favHtml || "<li>—</li>"}</ul></td>
+                <td><ul style="margin:0;padding-left:16px;font-size:12px;color:#cbd5e1;">${conHtml || "<li>—</li>"}</ul></td>
+            </tr>
+            `;
+        }).join("") : `<tr><td colspan="5">Nenhum evento de falha registrado no período analisado — equipamento estável nos logs consultados.</td></tr>`;
+    }
+
+    const testsList = document.getElementById("crashRecommendedTestsList");
+    if (testsList) {
+        testsList.innerHTML = (inv.recommended_additional_tests || []).map(t => `<li style="margin-bottom:4px;">${t}</li>`).join("") || "<li>Manter monitoramento preventivo.</li>";
+    }
+
+    // 3. BSOD & Dumps
+    const bsodGuide = document.getElementById("crashBsodGuidanceBox");
+    if (bsodGuide) {
+        bsodGuide.innerHTML = (bsod.technical_guidance || []).map(g => `<div class="maint-card" style="font-size:12px;margin-bottom:6px;border-color:rgba(56,189,248,0.35);">ℹ️ ${g}</div>`).join("");
+    }
+    const bsodTbody = document.getElementById("crashBsodTableBody");
+    if (bsodTbody) {
+        const bEvs = bsod.bugcheck_incidents || [];
+        bsodTbody.innerHTML = bEvs.length ? bEvs.map(b => `
+            <tr>
+                <td><code>${b.timestamp}</code></td>
+                <td><span class="badge err">${b.bugcheck_code || "BugCheck"}</span></td>
+                <td><strong>${b.bugcheck_name || "STOP_ERROR"}</strong><br><small class="muted">${b.technical_meaning || ""}</small></td>
+                <td><small>${b.original_message || ""}</small></td>
+            </tr>
+        `).join("") : `<tr><td colspan="4">Nenhum evento de Tela Azul (BugCheck) registrado no período analisado.</td></tr>`;
+    }
+
+    const dumpsTbody = document.getElementById("crashDumpsTableBody");
+    if (dumpsTbody) {
+        const dFiles = bsod.minidumps || [];
+        dumpsTbody.innerHTML = dFiles.length ? dFiles.map(d => {
+            const osMods = (d.involved_victim_modules || []).map(m => `<code>${m}</code>`).join(", ") || "—";
+            const susMods = (d.probable_suspect_modules || []).map(m => `<span class="badge warn">${m}</span>`).join(" ") || "Nenhum driver 3rd-party isolado";
+            return `
+            <tr>
+                <td><strong>${d.filename}</strong><br><small class="muted">Assinatura válida: ${d.valid_signature ? "Sim" : "Não"}</small></td>
+                <td><code>${d.modified_at}</code><br><small class="muted">${d.size_kb} KB</small></td>
+                <td>${osMods}</td>
+                <td>${susMods}</td>
+                <td><small>${d.confirmed_cause_from_dump || ""}</small></td>
+            </tr>
+            `;
+        }).join("") : `<tr><td colspan="5">Nenhum arquivo .dmp encontrado em Minidump ou MEMORY.DMP.</td></tr>`;
+    }
+
+    // 4. Hardware & I/O Correlation
+    const ioBox = document.getElementById("crashIoCorrelationBox");
+    if (ioBox) {
+        const notesHtml = (ioCorr.technical_notes || []).map(n => `<div class="maint-card" style="margin-top:6px;border-color:#38bdf8;font-size:12.5px;">${n}</div>`).join("");
+        ioBox.innerHTML = `
+            <div class="kv-row"><span class="muted">Classificação Primária Hardware/I/O</span><strong>${ioCorr.primary_classification || "Nominal"}</strong></div>
+            <div class="kv-row"><span class="muted">Eventos Disco/StorPort (51 / 129 / 153 / 7-154)</span><strong>51: ${ec.event_51_paging || 0} | 129: ${ec.event_129_storport_reset || 0} | 153: ${ec.event_153_io_retry || 0} | 7/154: ${ec.event_7_154_media_hw || 0}</strong></div>
+            <div class="kv-row"><span class="muted">Remoção Surpresa (ID 157) / WHEA / TDR 4101</span><strong>ID 157: ${ec.event_157_surprise_removal || 0} | WHEA: ${ec.whea_events || 0} | TDR 4101: ${ec.display_tdr_4101 || 0}</strong></div>
+            <div class="kv-row"><span class="muted">Temperaturas Atuais (CPU / GPU)</span><strong>CPU: ${ioCorr.cpu_temp_c ?? "N/D"}°C | GPU: ${ioCorr.gpu_temp_c ?? "N/D"}°C</strong></div>
+            ${notesHtml}
+        `;
+    }
+
+    // 5. Reliability Monitor
+    const relSumBox = document.getElementById("crashReliabilitySummaryBox");
+    if (relSumBox) {
+        relSumBox.innerHTML = `
+            <div class="kv-row"><span class="muted">Total de Registros de Confiabilidade</span><strong>${rel.total_records || 0} (${rel.source_available ? "Fonte Ativa" : "Fonte Indisponível"})</strong></div>
+            <div class="kv-row"><span class="muted">Falhas de Aplicativos vs Sistema/HW</span><strong>Apps: ${rel.app_failures_count || 0} | SO/HW: ${rel.os_hardware_failures_count || 0}</strong></div>
+            <div class="kv-row"><span class="muted">Atualizações / Instalações Próximas</span><strong>${rel.installations_updates_count || 0} alteração(ões) registrada(s)</strong></div>
+        `;
+    }
+    const relTbody = document.getElementById("crashReliabilityTableBody");
+    if (relTbody) {
+        const allRel = [
+            ...(rel.os_hardware_failures || []).map(r => ({ ...r, _type: "FALHA SO/HW" })),
+            ...(rel.app_failures || []).map(r => ({ ...r, _type: "FALHA APP" })),
+            ...(rel.installations_updates || []).map(r => ({ ...r, _type: "UPDATE/INSTALL" }))
+        ];
+        relTbody.innerHTML = allRel.length ? allRel.slice(0, 40).map(r => `
+            <tr>
+                <td><code>${r.timestamp}</code></td>
+                <td><span class="badge ${r._type === "UPDATE/INSTALL" ? "ok" : "warn"}">${r._type}</span></td>
+                <td><strong>${r.source || "Windows"}</strong><br><small class="muted">${r.product || ""}</small></td>
+                <td><small>${r.message || ""}</small></td>
+            </tr>
+        `).join("") : `<tr><td colspan="4">Nenhum registro de confiabilidade retornado no período.</td></tr>`;
+    }
+
+    // 6. Eventos do Windows (Original vs Interpretação Separada)
+    const evs = inv.events || [];
+    const evBadge = document.getElementById("crashEventsCountBadge");
+    if (evBadge) evBadge.textContent = `${evs.length} evento(s)`;
+    const evTbody = document.getElementById("crashEventsTableBody");
+    if (evTbody) {
+        evTbody.innerHTML = evs.length ? evs.slice(0, 80).map(e => {
+            const bCls = e.severity === "CRÍTICO" ? "err" : (e.severity === "ERRO" ? "warn" : "ok");
+            return `
+            <tr>
+                <td><code>${e.timestamp}</code></td>
+                <td><span class="badge ${bCls}">${e.severity}</span></td>
+                <td><strong>${e.source}</strong></td>
+                <td><code>#${e.event_id}</code></td>
+                <td><strong>${e.affected_component}</strong><br><small class="muted">${e.category}</small></td>
+                <td><small>${e.original_message || ""}</small></td>
+                <td><small style="color:#93c5fd;">${e.technical_interpretation || ""}</small></td>
+            </tr>
+            `;
+        }).join("") : `<tr><td colspan="7">Nenhum evento correspondente aos filtros selecionados no período.</td></tr>`;
+    }
+
+    // 7. Linha do Tempo Consolidada & Recorrência
+    const tl = inv.consolidated_timeline || [];
+    const tlTbody = document.getElementById("crashTimelineTableBody");
+    if (tlTbody) {
+        tlTbody.innerHTML = tl.length ? tl.slice(0, 50).map(t => {
+            const bCls = t.severity === "CRÍTICO" ? "err" : (t.severity === "ERRO" ? "warn" : "ok");
+            return `
+            <tr>
+                <td><code>${t.timestamp}</code></td>
+                <td><small>${t.category}</small></td>
+                <td><span class="badge ${bCls}">${t.severity}</span></td>
+                <td><strong>${t.source}</strong> (#${t.event_id})</td>
+                <td><strong>${t.affected_component}</strong><br><small class="muted">${t.original_message || ""}</small></td>
+            </tr>
+            `;
+        }).join("") : `<tr><td colspan="5">Linha do tempo sem ocorrências no período.</td></tr>`;
+    }
+
+    const recGroups = inv.recurring_events_summary || [];
+    const recTbody = document.getElementById("crashRecurringTableBody");
+    if (recTbody) {
+        recTbody.innerHTML = recGroups.length ? recGroups.map(g => `
+            <tr>
+                <td><code>${g.signature}</code></td>
+                <td><span class="badge ${g.count >= 3 ? "err" : "warn"}">${g.count}x</span></td>
+                <td><code>${g.first_seen}</code></td>
+                <td><code>${g.last_seen}</code></td>
+                <td><strong>${g.affected_component}</strong> (${g.category})</td>
+            </tr>
+        `).join("") : `<tr><td colspan="5">Nenhuma assinatura recorrente detectada.</td></tr>`;
+    }
+
+    // 8. Correlação Inteligente por IA & Dossiê N3
+    const aiCorr = inv.ai_correlation || {};
+    const aiBadge = document.getElementById("crashAiModelBadge");
+    if (aiBadge) {
+        aiBadge.textContent = `Provedor: ${aiCorr.provider_used || "local_deterministic_n3"} | Assistido por Nuvem: ${aiCorr.ai_used ? "Sim" : "Não (Regras Determinísticas N3)"}`;
+    }
+    const aiBox = document.getElementById("crashAiDossierBox");
+    if (aiBox) {
+        aiBox.textContent = aiCorr.structured_analysis_text || aiCorr.deterministic_baseline_text || "";
+    }
+
+    // 9. Plano de Ação Priorizado & Catálogo Seguro
+    const planBox = document.getElementById("crashPrioritizedPlanBox");
+    if (planBox) {
+        const planItems = inv.action_plan || [];
+        planBox.innerHTML = planItems.map((p, idx) => `
+            <div class="maint-card" style="margin-bottom:8px;border-left:3px solid ${p.requires_backup ? "#ef4444" : "#10b981"};">
+                <div class="flex-between">
+                    <strong>Passo ${idx + 1}: ${p.title}</strong>
+                    <span class="badge ${p.requires_backup ? "err" : "ok"}">${p.risk_level} | Backup Prévio: ${p.requires_backup ? "SIM" : "Não"}</span>
+                </div>
+                <div style="font-size:12.5px;margin-top:4px;">
+                    <strong>Objetivo:</strong> ${p.objective}<br>
+                    <strong>Procedimento / Comando:</strong> <code>${p.suggested_command_or_procedure}</code><br>
+                    <span class="muted"><strong>Pré-requisitos:</strong> ${p.prerequisites} | <strong>Impacto:</strong> ${p.expected_impact}</span>
+                </div>
+            </div>
+        `).join("");
+    }
+
+    const catalogList = Object.values(safeCatalogObj || {}).filter(a => a && a.executable_via_whitelist);
+    const safeGrid = document.getElementById("crashSafeActionsGrid");
+    if (safeGrid && catalogList.length) {
+        safeGrid.innerHTML = catalogList.map(act => `
+            <div class="maint-card">
+                <span class="badge ok">${act.risk_level || "Somente-Leitura"}</span>
+                <h4>${act.title}</h4>
+                <p style="font-size:12px;">${act.objective}</p>
+                <small class="muted" style="display:block;margin-bottom:8px;">Cmd: <code>${act.suggested_command_or_procedure}</code></small>
+                <button class="btn secondary" onclick="executeSafeCrashAction('${act.action_id}', '${act.title}')">▶️ Executar c/ Confirmação</button>
+            </div>
+        `).join("");
+    }
+}
+
+async function executeSafeCrashAction(actionId, title) {
+    const outBox = document.getElementById("crashActionExecutionOutput");
+    const confirmTok = prompt(
+        `🛡️ EXECUÇÃO SEGURA CONTROLADA N3:\n` +
+        `Ação: ${title} (${actionId})\n\n` +
+        `Esta operação é somente-leitura/diagnóstica e faz parte do catálogo homologado.\n` +
+        `Digite CONFIRMAR para autorizar a execução:`
+    );
+    if (!confirmTok) return;
+
+    if (outBox) outBox.textContent = `⏳ Executando ação autorizada [${actionId}]...`;
+    showToast(`🛡️ Executando ação diagnóstica autorizada: ${title}...`);
+
+    try {
+        const res = await apiFetch("/api/crash-investigator/action", {
+            method: "POST",
+            body: JSON.stringify({
+                action_id: actionId,
+                confirm_token: confirmTok.trim(),
+                investigation_id: CURRENT_CRASH_INVESTIGATION?.investigation_id || null
+            })
+        });
+        if (outBox) {
+            outBox.textContent =
+                `[${res.executed_at || "Agora"}] Ação: ${res.title || actionId}\n` +
+                `Status: ${res.success ? "✅ CONCLUÍDA" : "🔒 BLOQUEADA / FALHOU"}\n` +
+                `Mensagem: ${res.message || ""}\n\n` +
+                `${res.output || ""}`;
+        }
+        showToast(res.message || "Ação concluída.");
+    } catch (e) {
+        if (outBox) outBox.textContent = `❌ Erro ao executar ação: ${e.message}`;
+        showToast(`❌ Erro: ${e.message}`);
+    }
+}
+
+async function loadCrashInvestigatorHistory() {
+    try {
+        const res = await apiFetch("/api/crash-investigator/history?limit=15");
+        const items = res.items || [];
+        const tbody = document.getElementById("crashHistoryTableBody");
+        if (!tbody) return;
+        tbody.innerHTML = items.length ? items.map(it => {
+            const totEv = (it.critical_count || 0) + (it.error_count || 0) + (it.warning_count || 0);
+            const rate = ((totEv / Math.max(1, it.period_hours || 168)) * 24).toFixed(2);
+            return `
+            <tr>
+                <td><code>#${it.id}</code></td>
+                <td><code>${it.investigated_at}</code></td>
+                <td><strong>${it.hostname}</strong></td>
+                <td>${it.period_hours}h</td>
+                <td><code>${it.engine_version}</code></td>
+                <td><span class="badge ${it.overall_severity === "NORMAL" ? "ok" : "warn"}">${it.overall_severity}</span></td>
+                <td><strong>${totEv}</strong> (${rate}/24h)</td>
+                <td>${it.bugcheck_count} BSOD / ${it.minidump_count} Dumps</td>
+                <td><small>${it.headline || "—"}</small></td>
+            </tr>
+            `;
+        }).join("") : `<tr><td colspan="9">Nenhuma investigação persistida no SQLite ainda.</td></tr>`;
+    } catch (e) {
+        console.warn("Histórico do Crash Investigator indisponível:", e);
+    }
+}
+
+async function compareCrashPeriods() {
+    showToast("📊 Comparando períodos e tendências de incidentes no SQLite...");
+    try {
+        const res = await apiFetch("/api/crash-investigator/compare");
+        const panel = document.getElementById("crashComparisonPanel");
+        if (!panel) return;
+        panel.classList.remove("hidden");
+
+        document.getElementById("crashCompareSummaryText").innerHTML =
+            `<strong>${res.trend_verdict}:</strong> (<code>${res.older_date}</code> ➔ <code>${res.newer_date}</code>)`;
+
+        const warnBox = document.getElementById("crashCompareCoverageWarn");
+        if (warnBox) {
+            warnBox.innerHTML = res.coverage_differ_flag
+                ? `<div class="maint-card" style="border-color:#f59e0b;color:#fde68a;font-size:12.5px;">⚠️ ${res.coverage_warning}</div>`
+                : `<div class="muted" style="font-size:12px;">✅ Ambos os períodos possuem a mesma janela de cobertura (${res.newer_period_hours}h).</div>`;
+        }
+
+        const detBox = document.getElementById("crashCompareDetailsBox");
+        if (detBox) {
+            detBox.innerHTML = `
+                <div class="kv-row"><span class="muted">Taxa Normalizada de Críticos (/24h)</span><strong>${res.critical_rate_per_24h_older}/dia ➔ ${res.critical_rate_per_24h_newer}/dia</strong></div>
+                <div class="kv-row"><span class="muted">Variação de Eventos Críticos</span><strong>Δ ${res.critical_count_delta > 0 ? "+" : ""}${res.critical_count_delta}</strong></div>
+                <div class="kv-row"><span class="muted">Variação de Telas Azuis (BSOD)</span><strong>Δ ${res.bsod_count_delta > 0 ? "+" : ""}${res.bsod_count_delta} BSOD(s)</strong></div>
+                <div class="kv-row"><span class="muted">Variação de Erros de Disco/I/O</span><strong>Δ ${res.storage_io_delta > 0 ? "+" : ""}${res.storage_io_delta} evento(s)</strong></div>
+                <div class="kv-row"><span class="muted">Assinaturas Novas / Resolvidas / Recorrentes</span><span>Novas: <strong>${(res.new_occurrences || []).length}</strong> | Resolvidas: <strong>${(res.resolved_occurrences || []).length}</strong> | Recorrentes: <strong>${(res.recurring_occurrences || []).length}</strong></span></div>
+            `;
+        }
+    } catch (e) {
+        showToast(`ℹ️ ${e.message || "Execute ao menos 1 investigação para comparar períodos."}`);
+    }
+}
+
+const btnRunCrash = document.getElementById("btnRunCrashInvestigation");
+if (btnRunCrash) btnRunCrash.addEventListener("click", runCrashInvestigation);
+
+const btnCompCrash = document.getElementById("btnCompareCrashHistory");
+if (btnCompCrash) btnCompCrash.addEventListener("click", compareCrashPeriods);
+
+const btnRefCrashHist = document.getElementById("btnRefreshCrashHistory");
+if (btnRefCrashHist) btnRefCrashHist.addEventListener("click", loadCrashInvestigatorHistory);

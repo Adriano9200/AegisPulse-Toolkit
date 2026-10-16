@@ -167,34 +167,45 @@ def run_storage_integrity_test(
     t0 = time.perf_counter()
 
     if test_type == "write_verify":
-        if confirm_write_risk.strip() != "CONFIRMAR_ESCRITA_RISCO_DADOS":
+        from backend.services.storage_recovery import _is_protected_system_disk
+        if _is_protected_system_disk(device):
             msg = (
-                "🔒 TESTE DE ESCRITA BLOQUEADO POR SEGURANÇA: O AegisPulse não executa testes de escrita por padrão "
-                "para proteger os dados do cliente. Para autorizar um teste controlado de escrita em arquivo temporário, "
-                "digite exatamente CONFIRMAR_ESCRITA_RISCO_DADOS."
+                f"🚨 OPERAÇÃO RECUSADA: O dispositivo {device.get('model')} é a unidade do Sistema Operacional (Windows C:) "
+                "ou contém partição de inicialização ativa (EFI/Boot). Testes de escrita são estritamente proibidos no disco de sistema."
             )
-            log_storage_operation(base_dir, uid, "Teste de Escrita (Bloqueado)", risk["risk_level"], "blocked", msg)
+            log_storage_operation(base_dir, uid, "Teste de Escrita (Bloqueado no Disco de Sistema)", "CRÍTICO", "refused", msg)
             return {
                 "success": False,
                 "blocked_by_safety": True,
-                "test_type": test_type,
-                "message": msg,
-            }
-        if risk["block_destructive_or_chkdsk_write"]:
-            msg = (
-                f"🚨 OPERAÇÃO RECUSADA POR PROTEÇÃO DE DADOS: O dispositivo {device.get('model')} possui risco {risk['risk_level']} "
-                f"com sinais de falha física/mídia ({', '.join(risk.get('reasons') or ['Degradação SMART'])}). "
-                "Testes de escrita são estritamente bloqueados para evitar agravamento de setores pendentes e perda irreversível de dados. "
-                "Recomendação: priorize o backup imediato ou criação de imagem somente-leitura."
-            )
-            log_storage_operation(base_dir, uid, "Teste de Escrita (Recusado por Risco Físico)", risk["risk_level"], "refused", msg)
-            return {
-                "success": False,
-                "blocked_by_safety": True,
+                "blocked_system_disk": True,
                 "test_type": test_type,
                 "message": msg,
             }
 
+        valid_tokens = {
+            "CONFIRMAR_ESCRITA_RISCO_DADOS",
+            "AUTORIZAR_ESCRITA",
+            "AUTORIZAR_ESCRITA_RISCO",
+            "CONFIRMAR_ESCRITA",
+            f"AUTORIZAR_ESCRITA_DISK_{device.get('disk_number')}",
+            f"CONFIRMAR_ESCRITA_DISK_{device.get('disk_number')}",
+        }
+        tok_clean = (confirm_write_risk or "").strip().upper()
+        if tok_clean not in valid_tokens:
+            msg = (
+                f"🔒 TESTE DE ESCRITA BLOQUEADO POR SEGURANÇA: O AegisPulse protege os dados do cliente por padrão. "
+                f"Para autorizar expressamente este teste no Disk #{device.get('disk_number')} ({device.get('model')}), "
+                "digite AUTORIZAR_ESCRITA ou CONFIRMAR_ESCRITA_RISCO_DADOS."
+            )
+            log_storage_operation(base_dir, uid, "Teste de Escrita (Aguardando Confirmação)", risk["risk_level"], "blocked", msg)
+            return {
+                "success": False,
+                "blocked_by_safety": True,
+                "confirmation_required": True,
+                "expected_tokens": sorted(list(valid_tokens)),
+                "test_type": test_type,
+                "message": msg,
+            }
         try:
             block_bytes = 256 * 1024
             blocks_to_write = 16

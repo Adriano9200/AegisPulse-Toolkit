@@ -103,3 +103,31 @@ Nenhum código-fonte GPL dessas ferramentas é embutido ou redistribuído dentro
   - Mede o tempo de resposta do kernel WMI (`Win32_DiskDrive`) vs Virtual Disk Service (`Get-Disk` / `Get-Volume`), identifica contenção de I/O causada por unidades USB externas com setores pendentes (`SMART ID 197`) ou autotestes SMART estendidos em andamento, e comprova com evidências quando o SSD NVMe principal está íntegro.
 - **Suíte de Testes Automatizados Ampliada (26 Cenários)**:
   - 16 cenários de armazenamento, trava de boot, renumeração, conflito de letra `P:`, timeout VDS e inicializador (`tests/test_storage_module.py`) + 10 cenários determinísticos do Health Score (`tests/test_health_score.py`).
+
+
+---
+
+## 💥 Novidades v5.5.0 — AegisPulse Crash Investigator + Gerador Nativo de Laudos HTML & PDF
+
+### 1. Correção Definitiva do Gerador de Relatórios HTML & PDF (Prioridade 0)
+- **Causa Raiz Corrigida:** Eliminado o `NameError: name 'health_score_panel_html' is not defined` em `backend/services/html_reporter.py`, que interrompia a conexão HTTP antes do envio dos cabeçalhos (`ERR_EMPTY_RESPONSE` -> `TypeError: Failed to fetch` no navegador).
+- **Geração Real em Duplo Formato (`.html` + `.pdf`):** O endpoint `POST /api/report/generate` produz e valida tanto o arquivo HTML executivo quanto o documento binário PDF 1.4 multi-página (`%PDF-1.4` ... `%%EOF`) sem dependências externas.
+- **Entrega HTTP e Tratamento por Etapa:** A rota `GET /reports/<arquivo>` serve arquivos `.html` (`text/html`) e `.pdf` (`application/pdf`) com suporte a `?download=1` (`Content-Disposition: attachment`). Erros são diferenciados por estágio (`connection_failure`, `route_not_found`, `html_render`, `pdf_generation`, `file_write_permission`, `file_delivery`).
+
+### 2. AegisPulse Crash Investigator (Suporte N1 / N2 / N3)
+- **Coletor Forense (`backend/collectors/crash_collector.py`):**
+  - **Fontes de Dados:** Logs do Windows (`System` e `Application` via `Get-WinEvent`), `Microsoft-Windows-Kernel-Power` (Event ID 41), `Microsoft-Windows-WHEA-Logger` (IDs 1, 17, 18, 19, 46, 47), `Microsoft-Windows-WER-SystemErrorReporting` (Event ID 1001), eventos de armazenamento/controladora (`disk`, `Ntfs`, `storahci`, `stornvme`, `storport` — IDs 7, 11, 51, 55, 98, 129, 140, 153, 154, 157), falhas de vídeo TDR (`Display` ID 4101), quedas de serviços/aplicativos (IDs 1000, 1002, 7000, 7023, 7031, 7034), Histórico de Confiabilidade (`Win32_ReliabilityRecords`) e inspeção segura de cabeçalhos em `%SystemRoot%\Minidump` e `%SystemRoot%\MEMORY.DMP`.
+  - **Separação Fato vs Interpretação:** A mensagem original do evento (fato observado) é mantida separada da interpretação técnica contextual.
+  - **Análise de Dumps (Vítimas vs Suspeitos):** Diferencia módulos nativos do kernel (`ntoskrnl.exe`, `win32kfull.sys`, `dxgkrnl.sys` — frequentemente vítimas da exceção) de drivers de terceiros suspeitos prováveis.
+- **Motor de Correlação, Hipóteses & Execução Segura (`backend/services/crash_investigator.py`):**
+  - Confronta evidências favoráveis e contrárias para cada hipótese, atribuindo pontuação de plausibilidade e nível de confiança.
+  - Diferencia falha física de mídia (SMART IDs 5, 197, 198 + Eventos 7/154) de falhas de comunicação/interface (SMART ID 199 CRC, Evento 129 StorPort Reset, Evento 157) e de interrupções elétricas (Kernel-Power 41 sem BugCheck).
+  - **Prioridade de Proteção de Dados:** Quando há indícios de degradação física de mídia, prioriza backup/imagem imediata e bloqueia testes intensivos de escrita ou reparos destrutivos automáticos (`chkdsk /f`, `chkdsk /r`).
+  - **Persistência SQLite & Comparação de Períodos:** Tabelas `crash_investigations` e `crash_authorized_actions` em `data/aegispulse_storage_history.db`, com comparação normalizada por taxa diária (`/24h`) e aviso explícito quando as janelas temporais divergem.
+
+### 3. Permissões, Limitações e Validação
+- **Permissões:** A leitura de determinados canais (`WHEA-Logger`, `Security`) e da pasta `%SystemRoot%\Minidump` pode exigir execução como Administrador. Quando executado sem elevação, o sistema informa explicitamente a limitação no painel sem travar.
+- **Como Validar os Testes Automatizados (56 testes):**
+  ```powershell
+  python -m unittest discover -s tests -p "test_*.py" -v
+  ```

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+r"""
 ================================================================================
 PROJETO: AegisPulse IT Toolkit
 ARQUIVO: backend/collectors/storage_advanced.py

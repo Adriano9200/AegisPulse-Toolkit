@@ -42,7 +42,7 @@ if str(BASE_DIR) not in sys.path:
 
 AUTHOR_NAME = "Adriano Barboza"
 AUTHOR_EMAIL = "adriano9200@gmail.com"
-APP_VERSION = "5.1.0"
+APP_VERSION = "5.5.0"
 
 CONFIG_FILE = BASE_DIR / "config.json"
 CONFIG_EXAMPLE = BUNDLE_DIR / "config.example.json"

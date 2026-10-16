@@ -89,6 +89,9 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                 <button class="nav-item" data-tab="tab-healthscore" style="border-left:3px solid #10b981;">
                     <span>🩺</span> Health Score (Índice de Saúde)
                 </button>
+                <button class="nav-item" data-tab="tab-crash" style="border-left:3px solid #ef4444;">
+                    <span>💥</span> Crash Investigator (BSOD &amp; Logs)
+                </button>
                 <button class="nav-item" data-tab="tab-storage" style="border-left:3px solid #38bdf8;">
                     <span>💿</span> Discos, SMART & Recuperação
                 </button>
@@ -357,6 +360,321 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                                 <tbody id="hsHistoryTableBody"></tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+
+            <!-- ABA NOVO v5.5: AEGISPULSE CRASH INVESTIGATOR (EVENTOS, BSOD, CONFIABILIDADE, I/O, HIPÓTESES & PLANO N3) -->
+            <section id="tab-crash" class="tab-panel">
+                <div class="panel-card" style="margin-bottom:16px;border-left:5px solid #ef4444;">
+                    <div class="flex-between" style="flex-wrap:wrap;gap:12px;">
+                        <div>
+                            <div class="flex-row" style="gap:8px;align-items:center;">
+                                <h2 style="font-size:20px;color:var(--text);margin:0;">💥 AegisPulse Crash Investigator — Investigação Forense de Falhas, BSOD &amp; I/O</h2>
+                                <span class="badge err" id="crashEngineVersionBadge">v5.5.0</span>
+                            </div>
+                            <p class="muted" style="margin-top:4px;">Correlação técnica N1/N2/N3 de Eventos do Windows, Telas Azuis (BugCheck/Minidumps), Histórico de Confiabilidade, SMART/I/O (51/129/153), Hipóteses com Evidências Favoráveis vs Contrárias e Plano de Ação Seguro.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn primary" id="btnRunCrashInvestigation" style="background:#ef4444;color:#fff;">🔍 Executar Investigação Forense</button>
+                            <button class="btn secondary" id="btnCompareCrashHistory">📊 Comparar Períodos (SQLite)</button>
+                            <button class="btn secondary" id="btnExportCrashReport" onclick="exportHtmlReport()">📄 Gerar Laudo HTML / PDF</button>
+                        </div>
+                    </div>
+
+                    <!-- BARRA DE FILTROS AVANÇADOS (PERÍODO, CATEGORIA, SEVERIDADE, ORIGEM E EVENT ID) -->
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(155px, 1fr));gap:10px;margin-top:14px;background:rgba(15,23,42,0.75);padding:12px;border-radius:8px;border:1px solid #334155;">
+                        <div>
+                            <label class="field-label" style="font-size:11px;">Período Analisado</label>
+                            <select id="crashPeriodSelect" class="full-input">
+                                <option value="1">Últimas 24 Horas (1 dia)</option>
+                                <option value="3">Últimos 3 Dias</option>
+                                <option value="7" selected>Últimos 7 Dias (Padrão)</option>
+                                <option value="15">Últimos 15 Dias</option>
+                                <option value="30">Últimos 30 Dias</option>
+                                <option value="60">Últimos 60 Dias</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="field-label" style="font-size:11px;">Categoria Técnica</label>
+                            <select id="crashCategorySelect" class="full-input">
+                                <option value="ALL" selected>Todas as Categorias</option>
+                                <option value="BSOD_BUGCHECK">Telas Azuis (BSOD / BugCheck)</option>
+                                <option value="POWER_KERNEL">Kernel-Power &amp; Reinícios (ID 41)</option>
+                                <option value="STORAGE_IO">Disco, NTFS &amp; I/O (51/129/153)</option>
+                                <option value="HARDWARE_WHEA">Hardware &amp; WHEA-Logger</option>
+                                <option value="DRIVER_DEVICE">Drivers &amp; Vídeo TDR (4101/219)</option>
+                                <option value="APP_SERVICE">Quedas de Apps &amp; Serviços</option>
+                                <option value="UPDATE_INSTALL">Atualizações &amp; Instalações</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="field-label" style="font-size:11px;">Severidade</label>
+                            <select id="crashSeveritySelect" class="full-input">
+                                <option value="ALL" selected>Todas (Crítico/Erro/Aviso)</option>
+                                <option value="CRITICAL">Apenas Críticos</option>
+                                <option value="ERROR">Apenas Erros</option>
+                                <option value="WARNING">Apenas Avisos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="field-label" style="font-size:11px;">Origem / Provider</label>
+                            <input type="text" id="crashSourceInput" class="full-input" placeholder="Ex: disk, nvlddmkm, WHEA">
+                        </div>
+                        <div>
+                            <label class="field-label" style="font-size:11px;">Event ID Específico</label>
+                            <input type="number" id="crashEventIdInput" class="full-input" placeholder="Ex: 41, 129, 153, 1001">
+                        </div>
+                        <div>
+                            <label class="field-label" style="font-size:11px;">Motor de Correlação IA</label>
+                            <select id="crashAiProviderSelect" class="full-input">
+                                <option value="local" selected>🧠 Motor Determinístico N3 Local</option>
+                                <option value="gemini">✨ Google Gemini Cloud + N3</option>
+                                <option value="grok">🚀 xAI Grok / Groq Cloud + N3</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- BANNER DE PERMISSÕES, COBERTURA E LIMITAÇÕES DE COLETA -->
+                    <div id="crashLimitationsBanner" class="maint-card" style="margin-top:12px;border-color:#38bdf8;font-size:12.5px;">
+                        ℹ️ Clique em <strong>"Executar Investigação Forense"</strong> acima para coletar e correlacionar os logs reais do Windows Event Log, Minidumps de BSOD, Histórico de Confiabilidade e Telemetria SMART/I/O.
+                    </div>
+                    <div id="crashReportStatusBox" style="margin-top:10px;"></div>
+                </div>
+
+                <!-- 1. RESUMO EXECUTIVO DE INCIDENTES (KPIs REAIS) -->
+                <div class="kpi-grid" style="margin-bottom:16px;">
+                    <div class="kpi-card">
+                        <span class="kpi-label">STATUS DO INCIDENTE</span>
+                        <strong id="crashKpiStatus" style="color:#10b981;">Aguardando Coleta</strong>
+                        <small id="crashKpiPeriod" class="muted">Período: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">EVENTOS CRÍTICOS &amp; ERROS</span>
+                        <strong id="crashKpiEventsCount">—</strong>
+                        <small id="crashKpiEventsRate" class="muted">Taxa normalizada: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">TELAS AZUIS (BSOD) &amp; DUMPS</span>
+                        <strong id="crashKpiBsodCount">—</strong>
+                        <small id="crashKpiDumpFiles" class="muted">Arquivos Minidump: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">DISCO / I/O (51/129/153) &amp; WHEA</span>
+                        <strong id="crashKpiIoWhea">—</strong>
+                        <small id="crashKpiRiskProtection" class="muted">Proteção de Dados: —</small>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">HISTÓRICO DE CONFIABILIDADE</span>
+                        <strong id="crashKpiReliability">—</strong>
+                        <small id="crashKpiChanges" class="muted">Mudanças/Updates: —</small>
+                    </div>
+                </div>
+
+                <!-- PAINEL DE COMPARAÇÃO ENTRE INVESTIGAÇÕES / PERÍODOS (OCULTO POR PADRÃO) -->
+                <div id="crashComparisonPanel" class="panel-card hidden" style="margin-bottom:16px;border-left:4px solid #f59e0b;">
+                    <div class="flex-between">
+                        <div>
+                            <h3 style="color:#f59e0b;">📊 Comparação Temporal de Períodos &amp; Evolução de Incidentes (SQLite)</h3>
+                            <p class="muted" id="crashCompareSummaryText">Comparando taxas normalizadas por 24h entre duas investigações...</p>
+                        </div>
+                        <button class="btn secondary" onclick="document.getElementById(crashComparisonPanel).classList.add(hidden)">✕ Fechar Comparativo</button>
+                    </div>
+                    <div id="crashCompareCoverageWarn" style="margin-top:8px;"></div>
+                    <div id="crashCompareDetailsBox" class="kv-list" style="margin-top:10px;"></div>
+                </div>
+
+                <!-- 2. HIPÓTESES TÉCNICAS ORDENADAS POR PLAUSIBILIDADE (FAVORÁVEIS vs CONTRÁRIAS) -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #38bdf8;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>1. Hipóteses Técnicas Ordenadas por Plausibilidade (Evidências Favoráveis vs Contrárias &amp; Confiança)</h3>
+                            <p class="muted">Nenhuma conclusão é tirada de um evento isolado. Cada hipótese confronta fatos observados a favor e contra antes de definir o nível de confiança.</p>
+                        </div>
+                        <span class="badge ok" id="crashHypothesesCountBadge">0 hipóteses</span>
+                    </div>
+                    <div class="table-scroll" style="margin-top:12px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th># / Hipótese Técnica &amp; Componente</th>
+                                    <th>Plausibilidade</th>
+                                    <th>Confiança &amp; Justificativa</th>
+                                    <th>Evidências Favoráveis (Fatos Observados)</th>
+                                    <th>Evidências Contrárias / Atenuantes</th>
+                                </tr>
+                            </thead>
+                            <tbody id="crashHypothesesTableBody">
+                                <tr><td colspan="5">Execute a investigação acima para avaliar hipóteses técnicas baseadas em evidências reais.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top:12px;">
+                        <strong style="color:#38bdf8;font-size:13px;">🔬 Testes Adicionais Não-Destrutivos Recomendados para Confirmação:</strong>
+                        <ul id="crashRecommendedTestsList" style="padding-left:18px;margin-top:6px;font-size:13px;line-height:1.55;"></ul>
+                    </div>
+                </div>
+
+                <!-- 3. ANÁLISE DE TELAS AZUIS (BSOD) & INSPEÇÃO SEGURA DE MINIDUMPS -->
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>2. Investigação de Telas Azuis (BSOD / BugCheck) &amp; Padrões</h3>
+                        <p class="muted" style="margin-bottom:8px;">Registros de parada crítica (WER Event 1001 / BugCheck) e recorrência de códigos.</p>
+                        <div id="crashBsodGuidanceBox" style="margin-bottom:8px;"></div>
+                        <div class="table-scroll" style="max-height:260px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Horário</th><th>BugCheck</th><th>Significado Técnico</th><th>Descrição Original</th></tr>
+                                </thead>
+                                <tbody id="crashBsodTableBody">
+                                    <tr><td colspan="4">Nenhuma tela azul analisada ainda.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>3. Arquivos de Dump Encontrados (Vítimas de SO vs Suspeitos de Terceiros)</h3>
+                        <p class="muted" style="margin-bottom:8px;">Diferencia módulos do kernel (ex: <code>ntoskrnl.exe</code> — vítima) de drivers de terceiros suspeitos.</p>
+                        <div class="table-scroll" style="max-height:260px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Arquivo Dump</th><th>Data / Tamanho</th><th>Módulos SO (Vítimas)</th><th>Drivers Terceiros (Suspeitos)</th><th>Nota Forense</th></tr>
+                                </thead>
+                                <tbody id="crashDumpsTableBody">
+                                    <tr><td colspan="5">Nenhum dump inspecionado ainda.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. INVESTIGAÇÃO DE HARDWARE & ERROS DE I/O + 5. HISTÓRICO DE CONFIABILIDADE -->
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>4. Investigação de Hardware, Armazenamento &amp; Erros de I/O</h3>
+                        <p class="muted" style="margin-bottom:8px;">Correlação contextual entre Eventos 51/129/153/154, WHEA-Logger, SMART, temperaturas e drivers.</p>
+                        <div id="crashIoCorrelationBox" class="kv-list"></div>
+                        <div id="crashSuspectDriversBox" style="margin-top:10px;"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>5. Histórico de Confiabilidade do Windows (Reliability Monitor)</h3>
+                        <p class="muted" style="margin-bottom:8px;">Correlação temporal entre quedas de aplicativos, falhas de SO e instalações/atualizações recentes.</p>
+                        <div id="crashReliabilitySummaryBox" class="kv-list" style="margin-bottom:8px;"></div>
+                        <div class="table-scroll" style="max-height:210px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Data/Hora</th><th>Tipo</th><th>Origem / Produto</th><th>Mensagem Registrada</th></tr>
+                                </thead>
+                                <tbody id="crashReliabilityTableBody">
+                                    <tr><td colspan="4">Aguardando leitura do Histórico de Confiabilidade.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. EVENTOS DO WINDOWS (MENSAGEM ORIGINAL vs INTERPRETAÇÃO TÉCNICA) -->
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>6. Investigador de Eventos do Windows (Descrição Original vs Interpretação Técnica Separada)</h3>
+                            <p class="muted">Cada evento separa estritamente o fato bruto registrado pelo Windows da interpretação contextual N3.</p>
+                        </div>
+                        <span class="badge ok" id="crashEventsCountBadge">0 eventos</span>
+                    </div>
+                    <div class="table-scroll" style="margin-top:10px;max-height:360px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Horário</th>
+                                    <th>Severidade</th>
+                                    <th>Canal / Origem</th>
+                                    <th>Event ID</th>
+                                    <th>Componente</th>
+                                    <th>Descrição Original (Fato Registrado)</th>
+                                    <th>Interpretação Técnica Contextual (Análise)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="crashEventsTableBody">
+                                <tr><td colspan="7">Nenhum evento filtrado. Clique em "Executar Investigação Forense".</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 7. LINHA DO TEMPO CONSOLIDADA & RECORRÊNCIA -->
+                <div class="two-col" style="margin-bottom:16px;">
+                    <div class="panel-card">
+                        <h3>7. Linha do Tempo Consolidada (Eventos + Confiabilidade + Updates)</h3>
+                        <div class="table-scroll" style="max-height:260px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Horário</th><th>Tipo</th><th>Severidade</th><th>Origem / ID</th><th>Resumo</th></tr>
+                                </thead>
+                                <tbody id="crashTimelineTableBody">
+                                    <tr><td colspan="5">Linha do tempo vazia.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>8. Padrões de Recorrência &amp; Agrupamento por Assinatura</h3>
+                        <div class="table-scroll" style="max-height:260px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Origem : Event ID</th><th>Ocorrências</th><th>Primeira Vez</th><th>Última Vez</th><th>Título Técnico</th></tr>
+                                </thead>
+                                <tbody id="crashRecurringTableBody">
+                                    <tr><td colspan="5">Sem agrupamentos calculados.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 8. CORRELAÇÃO INTELIGENTE POR IA & DOSSIÊ N3 ESTRUTURADO -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #10b981;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>9. Correlação Inteligente por IA &amp; Parecer Técnico N3 (8 Seções Obrigatórias)</h3>
+                            <p class="muted" id="crashAiModelBadge">Motor Local Determinístico N3 pronto (funciona 100% offline ou integrado ao Gemini/Grok).</p>
+                        </div>
+                        <button class="btn secondary" onclick="exportHtmlReport()">📄 Incluir no Laudo HTML / PDF</button>
+                    </div>
+                    <pre id="crashAiDossierBox" class="terminal-box" style="margin-top:10px;min-height:240px;white-space:pre-wrap;">Execute a investigação para gerar o dossiê completo com Resumo Executivo, Linha do Tempo, Hipóteses Ordenadas, Evidências Favoráveis/Contrárias, Nível de Confiança, Testes Recomendados, Plano N3 e Riscos.</pre>
+                </div>
+
+                <!-- 9. PLANO DE AÇÃO N3 & EXECUÇÃO SEGURA CONTROLADA (COM CONFIRMAÇÃO EXPLÍCITA) -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #f59e0b;">
+                    <h3>10. Plano de Ação Priorizado N3 &amp; Execução Segura Controlada (Sem Execução Automática Destrutiva)</h3>
+                    <p class="muted" style="margin-bottom:12px;">
+                        🔒 <strong>Trava de Segurança N3:</strong> Nenhum comando destrutivo (<code>chkdsk /f</code>, <code>chkdsk /r</code>, reparo de boot, registro ou BIOS) é executado automaticamente. Apenas ações diagnósticas homologadas na whitelist podem ser disparadas mediante confirmação explícita (<code>CONFIRMAR</code>).
+                    </p>
+                    <div id="crashPrioritizedPlanBox" style="margin-bottom:14px;"></div>
+                    <h4 style="color:#38bdf8;margin-bottom:8px;">🛡️ Catálogo de Ações Diagnósticas Seguras Homologadas (Requer Confirmação Explícita):</h4>
+                    <div id="crashSafeActionsGrid" class="maint-grid"></div>
+                    <pre id="crashActionExecutionOutput" class="terminal-box" style="margin-top:12px;min-height:110px;">Nenhuma ação executada nesta sessão. Selecione uma ação diagnóstica segura acima e confirme para visualizar o resultado auditado.</pre>
+                </div>
+
+                <!-- 10. HISTÓRICO PERSISTENTE DE INVESTIGAÇÕES NO SQLITE -->
+                <div class="panel-card">
+                    <div class="flex-between" style="margin-bottom:10px;">
+                        <div>
+                            <h3>11. Histórico Persistente de Investigações no SQLite (<code>crash_investigations</code>)</h3>
+                            <p class="muted">Armazena resumos, contadores, hipóteses e ações autorizadas para auditoria e comparação entre períodos.</p>
+                        </div>
+                        <button class="btn secondary" id="btnRefreshCrashHistory">🔄 Atualizar Histórico SQLite</button>
+                    </div>
+                    <div class="table-scroll" style="max-height:240px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>ID</th><th>Data/Hora</th><th>Host</th><th>Período</th><th>Categoria</th><th>Status</th><th>Eventos (Taxa/24h)</th><th>BSODs</th><th>Hipótese Principal</th></tr>
+                            </thead>
+                            <tbody id="crashHistoryTableBody">
+                                <tr><td colspan="9">Nenhuma investigação registrada ainda.</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -1118,8 +1436,9 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                             <h3>Logs de Auditoria da Sessão & Exportação de Laudo HTML / PDF Executivo v4.0</h3>
                             <p class="muted">Inclui Dossiê Forense de Discos & SMART, Temperaturas de CPU/GPU, Matriz de Compatibilidade, Seção PC Gamer e Parecer da IA.</p>
                         </div>
-                        <button class="btn primary" onclick="exportHtmlReport()">📄 Gerar e Abrir Relatório HTML / PDF Agora</button>
+                        <button class="btn primary" id="btnExportHtmlTab" onclick="exportHtmlReport()">📄 Gerar e Abrir Relatório HTML / PDF Agora</button>
                     </div>
+                    <div id="reportStatusBox" style="margin-top:12px;"></div>
                     <table class="data-table" style="margin-top:14px;">
                         <thead>
                             <tr><th>Horário</th><th>Operação</th><th>Resumo Técnico</th></tr>

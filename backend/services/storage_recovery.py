@@ -903,13 +903,13 @@ def validate_destructive_storage_target(
         }
 
     # 5. Bloqueio de destinos com identidade ambígua ou incompleta
+    is_generic_model = model in ("", "Unknown", "Dispositivo de Armazenamento", "Disco Desconhecido")
+    is_generic_serial = serial in ("", "N/D", "UNKNOWN", f"DISK{disk_num}-NOSERIAL")
     if (
         bool(device.get("is_ambiguous_identity"))
-        or not uid
-        or uid.startswith("DISK_")
+        or (not uid and not model)
         or cap_bytes <= 0
-        or model in ("", "Unknown", "Dispositivo de Armazenamento", "Disco Desconhecido")
-        or serial in ("", "N/D", "UNKNOWN", f"DISK{disk_num}-NOSERIAL")
+        or (is_generic_model and is_generic_serial)
     ):
         msg = (
             f"🚫 OPERAÇÃO BLOQUEADA ({operation_name}): A identidade do Disco #{disk_num} é ambígua ou incompleta "

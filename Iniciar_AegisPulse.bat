@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableExtensions
 chcp 65001 >nul
-title AegisPulse IT Toolkit v5.1 - Por Adriano Barboza
+title AegisPulse IT Toolkit v5.5.0 - Por Adriano Barboza
 cd /d "%~dp0"
 
 echo ============================================================================
-echo   AEGISPULSE IT TOOLKIT v5.1 - Diagnostico, Health Score ^& Seguranca de Disco
+echo   AEGISPULSE IT TOOLKIT v5.5.0 - Diagnostico, Health Score ^& Seguranca de Disco
 echo   Desenvolvido por Adriano Barboza ^| WhatsApp: +55 61 98515-8434
 echo ============================================================================
 echo.

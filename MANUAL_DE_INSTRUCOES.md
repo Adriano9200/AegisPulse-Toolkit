@@ -108,3 +108,29 @@ git push
   - Mede o tempo de resposta do kernel WMI (`Win32_DiskDrive`) vs Virtual Disk Service (`Get-Disk` / `Get-Volume`), identifica contenção de I/O causada por unidades USB externas com setores pendentes (`SMART ID 197`) ou autotestes SMART estendidos em andamento, e comprova com evidências quando o SSD NVMe principal está íntegro.
 - **Suíte de Testes Automatizados Ampliada (26 Cenários)**:
   - 16 cenários de armazenamento, trava de boot, renumeração, conflito de letra `P:`, timeout VDS e inicializador (`tests/test_storage_module.py`) + 10 cenários determinísticos do Health Score (`tests/test_health_score.py`).
+
+
+---
+
+## 💥 Guia Operacional v5.5 — Crash Investigator & Laudos HTML/PDF
+
+### 1. Como Gerar e Baixar Laudos HTML e PDF
+1. No topo da interface (ou nas abas **Crash Investigator** e **Relatórios & Logs HTML**), clique em **📄 Gerar Laudo HTML / PDF**.
+2. O sistema valida os dados coletados, gera o arquivo `.html` e o arquivo `.pdf` na pasta `reports/` e exibe os botões:
+   - **🌐 Abrir Laudo HTML** e **📑 Abrir Laudo PDF** (visualização imediata).
+   - **⬇️ Baixar HTML** e **⬇️ Baixar PDF** (download direto com `Content-Disposition: attachment`).
+3. Caso a IA em nuvem (Gemini/Grok) não tenha sido acionada ou esteja offline, o laudo é gerado normalmente utilizando o **Parecer Técnico Determinístico Local N3**, sinalizando a origem local.
+
+### 2. Como Utilizar o AegisPulse Crash Investigator
+1. Acesse a aba lateral **💥 Crash Investigator (BSOD & Logs)**.
+2. Selecione os filtros desejados:
+   - **Período Analisado:** 24h, 3 dias, 7 dias (padrão), 15 dias, 30 dias ou 60 dias.
+   - **Categoria Técnica:** Todas, BSOD/BugCheck, Kernel-Power, Disco/NTFS/I/O, Hardware/WHEA, Drivers/TDR, Apps/Serviços ou Updates.
+   - **Severidade, Origem e Event ID:** Filtre ocorrências específicas (ex.: Event ID `41`, `129`, `153`, `1001`, `4101`).
+3. Clique em **🔍 Executar Investigação Forense**.
+4. **Como Interpretar as Hipóteses Técnicas:**
+   - **Plausibilidade e Confiança:** Calculadas com base na convergência de múltiplas fontes (Event Viewer + Minidump + Reliability Monitor + SMART).
+   - **Evidências Favoráveis vs Contrárias:** Verifique sempre a coluna de evidências contrárias antes de substituir peças. Exemplo: erros de `Event ID 129` ou `UltraDMA CRC (ID 199)` com `0` setores pendentes/realocados apontam para comunicação/interface/energia (cabo SATA, porta USB ou LPM/APST), e não para morte física das células do SSD.
+   - **Módulos em Minidumps:** Módulos nativos como `ntoskrnl.exe`, `win32kfull.sys` e `dxgkrnl.sys` são listados como **Vítimas do SO**, separados de **Drivers de Terceiros (Suspeitos Prováveis)**.
+5. **Execução Segura Controlada N3:**
+   - Nenhuma ação é executada automaticamente. Para rodar verificações somente-leitura homologadas (`DISM /CheckHealth`, auditoria `CrashControl`, histórico `WHEA-Logger`, esquema de energia `powercfg`), clique em **▶️ Executar c/ Confirmação** e digite `CONFIRMAR`.
