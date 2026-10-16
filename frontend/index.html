@@ -11,7 +11,7 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AegisPulse IT Toolkit v4.0 — Por Adriano Barboza</title>
+    <title>AegisPulse IT Toolkit v5.0 — Por Adriano Barboza</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -21,7 +21,7 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
             <div style="text-align:center;margin-bottom:14px;">
                 <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
                 <div class="modal-badge" style="margin-top:6px;">DIAGNÓSTICO • AUTOMAÇÃO • INTELIGÊNCIA</div>
-                <h2 style="margin-top:4px;">AegisPulse IT Toolkit v4.0</h2>
+                <h2 style="margin-top:4px;">AegisPulse IT Toolkit v5.0</h2>
                 <p class="modal-sub"><strong>Tecnologia sob controle. Suporte com inteligência.</strong><br>Desenvolvido por Adriano Barboza • WhatsApp: <strong>+55 61 98515-8434</strong></p>
             </div>
 
@@ -75,7 +75,7 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                     </div>
                     <div>
                         <h1 style="line-height:1.1;">AegisPulse</h1>
-                        <span style="color:#38bdf8;font-weight:700;letter-spacing:1px;font-size:10.5px;">IT TOOLKIT v4.0</span>
+                        <span style="color:#38bdf8;font-weight:700;letter-spacing:1px;font-size:10.5px;">IT TOOLKIT v5.0</span>
                     </div>
                 </div>
                 <div style="font-size:11px;color:#e2e8f0;font-weight:600;margin-top:2px;">Diagnóstico • Automação • Inteligência</div>
@@ -85,6 +85,9 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
             <nav class="nav-menu">
                 <button class="nav-item active" data-tab="tab-dashboard">
                     <span>📊</span> Visão Geral & Temps
+                </button>
+                <button class="nav-item" data-tab="tab-healthscore" style="border-left:3px solid #10b981;">
+                    <span>🩺</span> Health Score (Índice de Saúde)
                 </button>
                 <button class="nav-item" data-tab="tab-storage" style="border-left:3px solid #38bdf8;">
                     <span>💿</span> Discos, SMART & Recuperação
@@ -139,7 +142,7 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
             <header class="topbar">
                 <div>
                     <h2 id="machineTitle">Carregando diagnóstico do equipamento...</h2>
-                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse v4.0 inspeciona o sistema e os discos</p>
+                    <p id="machineSubtitle" class="muted">Aguarde enquanto o AegisPulse v5.0 inspeciona o sistema e os discos</p>
                 </div>
                 <div class="topbar-actions">
                     <span id="licenseBadge" class="status-pill" style="border-color:#38bdf8;color:#38bdf8;">Verificando Licença...</span>
@@ -176,6 +179,11 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                         <strong id="kpiAlerts">—</strong>
                         <small id="kpiBiosStatus" class="muted">BIOS: —</small>
                     </div>
+                    <div class="kpi-card" style="border-color:rgba(16,185,129,0.4);">
+                        <span class="kpi-label">ÍNDICE GERAL HEALTH SCORE</span>
+                        <strong id="kpiHealthScore" style="color:#10b981;">—</strong>
+                        <small id="kpiHealthCoverage" class="muted">Cobertura: —</small>
+                    </div>
                 </div>
 
                 <div class="two-col">
@@ -186,6 +194,169 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                     <div class="panel-card">
                         <h3>Segurança, Defender, Firmware & Sensores Térmicos</h3>
                         <div id="securityDetailsList" class="kv-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA NOVO: HEALTH SCORE (ÍNDICE INTELIGENTE DE SAÚDE) -->
+            <section id="tab-healthscore" class="tab-panel">
+                <!-- CABEÇALHO EXECUTIVO E PONTUAÇÃO GERAL -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:5px solid #10b981;">
+                    <div class="flex-between">
+                        <div>
+                            <div class="flex-row" style="gap:8px;align-items:center;">
+                                <h2 style="font-size:20px;color:var(--text);margin:0;">🩺 AegisPulse Health Score — Índice de Saúde do Computador</h2>
+                                <span class="badge ok" id="hsVersionBadge">v5.0</span>
+                            </div>
+                            <p class="muted" style="margin-top:4px;">Avaliação técnica determinística baseada em 8 categorias ponderadas, trilha de auditoria e análise de tendências.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn primary" id="btnEvaluateHealthScore">⚡ Recalcular Health Score Agora</button>
+                            <button class="btn secondary" id="btnCompareHealthScore">📊 Comparar com Avaliação Anterior</button>
+                            <button class="btn secondary" id="btnToggleAuditTrail">🔍 Ver Trilha de Deduções</button>
+                        </div>
+                    </div>
+
+                    <!-- CARD DE DESTAQUE DA NOTA -->
+                    <div class="kpi-grid" style="margin-top:16px;grid-template-columns: 1.2fr 1fr 1fr 1.5fr;">
+                        <div class="kpi-card" style="background:rgba(15,23,42,0.85);text-align:center;padding:16px;">
+                            <span class="kpi-label">PONTUAÇÃO GERAL DETERMINÍSTICA</span>
+                            <div style="font-size:38px;font-weight:900;line-height:1.1;margin:6px 0;" id="hsOverallScoreBig">—</div>
+                            <span class="badge ok" id="hsClassBadge" style="font-size:13px;padding:3px 12px;">Aguardando Coleta</span>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">COBERTURA DA AVALIAÇÃO</span>
+                            <strong id="hsCoverageCountText">—</strong>
+                            <small class="muted" id="hsCoveragePctText">0% das categorias disponíveis</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">IDENTIFICADOR NÃO-VOLÁTIL</span>
+                            <code id="hsMachineUuidText" style="font-size:12px;">—</code>
+                            <small class="muted" id="hsHostText">Host: —</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">STATUS TÉCNICO & TRAVA CRÍTICA</span>
+                            <div id="hsCriticalCapNotice" style="font-size:12.5px;font-weight:600;color:#34d399;">Sem falhas críticas bloqueantes</div>
+                            <small class="muted" id="hsEvaluatedAtText">Data: —</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAINEL COMPARATIVO / DIFF INTELIGENTE (OCULTO ATÉ SER SOLICITADO) -->
+                <div id="hsComparisonPanel" class="panel-card hidden" style="margin-bottom:16px;border-left:4px solid #f59e0b;">
+                    <div class="flex-between">
+                        <div>
+                            <h3 style="color:#f59e0b;">📊 Comparação Temporal com Avaliação Anterior (Diff de Tendência)</h3>
+                            <p class="muted" id="hsCompareTrendSummary">Analisando evolução métrica entre duas coletas...</p>
+                        </div>
+                        <button class="btn secondary" onclick="document.getElementById('hsComparisonPanel').classList.add('hidden')">✕ Fechar Comparativo</button>
+                    </div>
+                    <div class="kpi-grid" style="margin-top:12px;">
+                        <div class="kpi-card">
+                            <span class="kpi-label">VARIAÇÃO DA NOTA</span>
+                            <strong id="hsDiffScoreDelta">—</strong>
+                            <small class="muted" id="hsDiffDates">—</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">VARIAÇÃO DE COBERTURA</span>
+                            <strong id="hsDiffCoverageDelta">—</strong>
+                            <small class="muted">Diferença de sensores ativos</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">NOVOS PROBLEMAS</span>
+                            <strong id="hsDiffNewCount" style="color:#ef4444;">0</strong>
+                            <small class="muted">Alertas adicionados</small>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">PROBLEMAS RESOLVIDOS</span>
+                            <strong id="hsDiffResolvedCount" style="color:#10b981;">0</strong>
+                            <small class="muted">Falhas saneadas</small>
+                        </div>
+                    </div>
+                    <div id="hsDiffDetailsList" style="margin-top:12px;" class="kv-list"></div>
+                </div>
+
+                <!-- TRILHA DE AUDITORIA & EXPLICABILIDADE (OCULTO ATÉ SER SOLICITADO) -->
+                <div id="hsAuditPanel" class="panel-card hidden" style="margin-bottom:16px;border-left:4px solid #38bdf8;">
+                    <div class="flex-between">
+                        <div>
+                            <h3 style="color:#38bdf8;">🔍 Trilha de Auditoria & Justificativa da Pontuação</h3>
+                            <p class="muted">Transparência total sobre todos os fatores que reduziram a nota a partir da base 100.</p>
+                        </div>
+                        <button class="btn secondary" onclick="document.getElementById('hsAuditPanel').classList.add('hidden')">✕ Fechar Auditoria</button>
+                    </div>
+                    <div class="table-scroll" style="margin-top:12px;max-height:260px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Categoria</th><th>Pontos Deduzidos</th><th>Motivo / Evidência Técnica Observada</th></tr>
+                            </thead>
+                            <tbody id="hsAuditTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 8 CATEGORIAS PONDERADAS -->
+                <div class="panel-card" style="margin-bottom:16px;">
+                    <div class="flex-between" style="margin-bottom:12px;">
+                        <div>
+                            <h3>Desempenho por Categoria Avaliada (8 Pilares)</h3>
+                            <p class="muted">Cada categoria possui pontuação própria, peso normalizado, evidências reais e estado de integridade.</p>
+                        </div>
+                        <span class="badge ok">100% Determinístico</span>
+                    </div>
+                    <div class="catalog-grid" id="hsCategoriesGrid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));"></div>
+                </div>
+
+                <!-- DIAGNÓSTICO ACIONÁVEL PRIORIZADO -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #ef4444;">
+                    <div class="flex-between">
+                        <div>
+                            <h3>⚠️ Diagnóstico Acionável Priorizado (Problemas Detectados & Plano de Ação)</h3>
+                            <p class="muted">Ordenado estritamente por gravidade e risco aos dados: Falhas Críticas > Estabilidade > Desempenho > Preventivo.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn secondary active" onclick="filterFindings('TODOS', this)">Todos (<span id="countFindingsAll">0</span>)</button>
+                            <button class="btn secondary" onclick="filterFindings('CRÍTICO', this)" style="color:#ef4444;">Críticos (<span id="countFindingsCrit">0</span>)</button>
+                            <button class="btn secondary" onclick="filterFindings('ALTO', this)" style="color:#f97316;">Altos (<span id="countFindingsHigh">0</span>)</button>
+                            <button class="btn secondary" onclick="filterFindings('MÉDIO', this)" style="color:#f59e0b;">Médios (<span id="countFindingsMed">0</span>)</button>
+                        </div>
+                    </div>
+                    <div class="table-scroll" style="margin-top:12px;max-height:360px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Problema / Componente</th>
+                                    <th>Severidade</th>
+                                    <th>Impacto Provável</th>
+                                    <th>Evidência Técnica Observada</th>
+                                    <th>Grau de Confiança</th>
+                                    <th>Recomendação Técnica</th>
+                                    <th>Risco da Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hsFindingsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- HISTÓRICO PERSISTENTE SQLITE & GRÁFICO DE TENDÊNCIAS -->
+                <div class="two-col">
+                    <div class="panel-card">
+                        <h3>Evolução Histórica da Pontuação (Persistência SQLite)</h3>
+                        <p class="muted" style="margin-bottom:8px;">Acompanhamento contínuo da pontuação ao longo das semanas de suporte.</p>
+                        <div id="hsHistoryChartBox" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;min-height:140px;"></div>
+                    </div>
+                    <div class="panel-card">
+                        <h3>Avaliações Registradas na Base de Dados</h3>
+                        <p class="muted" style="margin-bottom:8px;">Histórico armazenado em <code>data/aegispulse_storage.db</code>.</p>
+                        <div class="table-scroll" style="max-height:210px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Data/Hora</th><th>Nota</th><th>Classificação</th><th>Cobertura</th><th>Falha Crítica</th><th>Ação</th></tr>
+                                </thead>
+                                <tbody id="hsHistoryTableBody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -318,6 +489,162 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
                     <div id="storageTestProgressBox" class="maint-card" style="margin-top:12px;">
                         Selecione um dos testes acima para medir velocidade (MB/s), tempo de resposta (ms), IOPS, blocos lentos (&gt;150ms) e erros de leitura...
                     </div>
+                </div>
+
+                <!-- 6B. CENTRAL SUPREMA DISKPART, DESBLOQUEIO FORÇADO, FORMATAÇÃO & CRIADOR DE PENDRIVE BOOTÁVEL (v5.0) -->
+                <div class="panel-card" style="margin-bottom:16px;border-left:4px solid #ef4444;background:linear-gradient(180deg, rgba(239,68,68,0.06) 0%, rgba(15,23,42,0.95) 100%);">
+                    <div class="flex-between" style="flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+                        <div>
+                            <h3>⚡ Central Suprema DiskPart, Desbloqueio Forçado, Formatação &amp; Criador de Disco Bootável</h3>
+                            <p class="muted">Força o reconhecimento e desbloqueio de qualquer disco interno ou USB (mesmo Sem Letra, Offline, RAW ou Read-Only), formata, manipula partições via DiskPart e cria pendrives/discos bootáveis.</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn primary" style="background:#10b981;font-weight:700;" onclick="runDiskpartUnlock()">⚡ FORÇAR DESBLOQUEIO TOTAL &amp; TORNAR UTILIZÁVEL (1-CLIQUE)</button>
+                            <button class="btn secondary" onclick="runDiskpartQuickAction('rescan_bus')">🔄 Forçar Rescan Barramento USB/SATA</button>
+                            <button class="btn secondary" onclick="runDiskpartQuickAction('detail_disk')">🔍 Inspecionar no DiskPart (Detail Disk)</button>
+                        </div>
+                    </div>
+
+                    <!-- BANNER DE IDENTIFICAÇÃO INEQUÍVOCA DO DESTINO (DISCO FÍSICO / PARTIÇÃO / VOLUME / RELAÇÃO COM WINDOWS) -->
+                    <div id="dpTargetSummaryBanner" style="margin-bottom:12px;padding:12px;border-radius:8px;border:1px solid #334155;background:#0f172a;">
+                        Selecione um dispositivo na tabela acima para visualizar sua identificação física, partições, volumes e status da trava de proteção do Windows...
+                    </div>
+
+                    <!-- DIAGNÓSTICO DE SAÚDE DO GERENCIAMENTO DE DISCO (diskmgmt.msc / VDS) -->
+                    <div id="vdsHealthDiagnosticBox" style="margin-bottom:12px;padding:10px 12px;border-radius:8px;border:1px solid #1e293b;background:rgba(15,23,42,0.75);font-size:12.5px;">
+                    </div>
+
+                    <div class="two-col" style="margin-bottom:14px;">
+                        <!-- SUB-CARD 1: DESBLOQUEIO & ATRIBUIÇÃO DE LETRA DE UNIDADE -->
+                        <div class="maint-card" style="border-top:3px solid #10b981;">
+                            <h4>🔓 1. Desbloqueio de Disco Inacessível &amp; Atribuição de Letra (Para Discos "Sem Letra")</h4>
+                            <p class="muted" style="font-size:12px;margin-bottom:8px;">
+                                Remove travas <code>Read-Only</code> (Disco, Volume e Registro <code>StorageDevicePolicies</code>), força <code>Online</code>, ativa <code>Automount</code> e monta imediatamente unidades que aparecem <strong>Sem Letra</strong> (como cases/adaptadores JMicron, ASMedia, Realtek e pendrives).
+                            </p>
+                            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:10px;cursor:pointer;">
+                                <input type="checkbox" id="dpInitIfRawCheckbox" checked />
+                                <span>Se o disco estiver <strong>Não Inicializado (RAW / 0 partições)</strong>, inicializar em GPT, criar partição 100% e montar automaticamente</span>
+                            </label>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <select id="dpDesiredLetterSelect" class="text-input" style="max-width:210px;">
+                                    <option value="AUTO">Letra Automática (1ª Livre)</option>
+                                    <option value="E">Letra E:</option>
+                                    <option value="F">Letra F:</option>
+                                    <option value="G">Letra G:</option>
+                                    <option value="H">Letra H:</option>
+                                    <option value="I">Letra I:</option>
+                                    <option value="J">Letra J:</option>
+                                    <option value="K">Letra K:</option>
+                                    <option value="L">Letra L:</option>
+                                    <option value="M">Letra M:</option>
+                                    <option value="N">Letra N:</option>
+                                    <option value="O">Letra O:</option>
+                                    <option value="P">Letra P:</option>
+                                    <option value="Q">Letra Q:</option>
+                                    <option value="R">Letra R:</option>
+                                    <option value="S">Letra S:</option>
+                                    <option value="T">Letra T:</option>
+                                    <option value="U">Letra U:</option>
+                                    <option value="V">Letra V:</option>
+                                    <option value="W">Letra W:</option>
+                                    <option value="X">Letra X:</option>
+                                    <option value="Y">Letra Y:</option>
+                                    <option value="Z">Letra Z:</option>
+                                </select>
+                                <button class="btn primary" onclick="runDiskpartAssignLetter()">🔤 Atribuir / Forçar Letra na Unidade</button>
+                                <button class="btn secondary" onclick="runDiskpartUnlock()">⚡ Desbloquear &amp; Reviver Disco</button>
+                            </div>
+                        </div>
+
+                        <!-- SUB-CARD 2: FORMATAÇÃO SUPREMA & RECONSTRUÇÃO DE PARTIÇÃO -->
+                        <div class="maint-card" style="border-top:3px solid #3b82f6;">
+                            <h4>💿 2. Formatação Suprema &amp; Reconstrução de Fábrica (NTFS / exFAT / FAT32)</h4>
+                            <p class="muted" style="font-size:12px;margin-bottom:8px;">
+                                Formata discos mesmo que estejam <strong>Sem Letra</strong> ou em estado <strong>RAW</strong>. Marque <em>Reconstruir do Zero</em> para limpar tabelas corrompidas (<code>clean</code>), converter para GPT/MBR, criar partição primária 100% e atribuir letra.
+                            </p>
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+                                <select id="dpFormatFsSelect" class="text-input">
+                                    <option value="NTFS">NTFS (Padrão Windows)</option>
+                                    <option value="EXFAT">exFAT (Pendrives / HDs USB)</option>
+                                    <option value="FAT32">FAT32 (UEFI / Universal)</option>
+                                </select>
+                                <select id="dpFormatStyleSelect" class="text-input">
+                                    <option value="GPT">Estilo GPT (UEFI / &gt;2TB)</option>
+                                    <option value="MBR">Estilo MBR (Legacy BIOS)</option>
+                                </select>
+                                <input type="text" id="dpFormatLabelInput" class="text-input" placeholder="Rótulo (ex: AEGIS_2TB)" value="AEGIS_DISK" />
+                            </div>
+                            <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;margin-bottom:8px;">
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                    <input type="checkbox" id="dpFormatQuickCheckbox" checked />
+                                    <span>Formatação Rápida (Quick)</span>
+                                </label>
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#fbbf24;">
+                                    <input type="checkbox" id="dpFormatFullRepartitionCheckbox" checked />
+                                    <span>🔥 Reconstruir do Zero (DiskPart Clean + Partição 100% + Atribuir Letra)</span>
+                                </label>
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <input type="text" id="dpFormatConfirmInput" class="text-input" placeholder="Digite FORMATAR para autorizar" style="max-width:220px;" />
+                                <button class="btn danger" onclick="runDiskpartFormat()">💿 Formatar &amp; Tornar Utilizável Agora</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="two-col" style="margin-bottom:12px;">
+                        <!-- SUB-CARD 3: TODAS AS FUNÇÕES DO DISKPART + CONSOLE SCRIPT -->
+                        <div class="maint-card" style="border-top:3px solid #f59e0b;">
+                            <h4>🛠️ 3. Todas as Funções do DiskPart (1-Clique + Console Script Direto)</h4>
+                            <p class="muted" style="font-size:12px;margin-bottom:8px;">
+                                Execute comandos nativos do <code>diskpart.exe</code> diretamente sobre o disco selecionado (para comandos destrutivos como <code>Clean</code> ou <code>Convert</code>, digite <code>CONFIRMAR</code> ao lado):
+                            </p>
+                            <div class="btn-row" style="margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+                                <button class="btn secondary" onclick="runDiskpartQuickAction('online_disk')">🟢 Online Disk</button>
+                                <button class="btn secondary" onclick="runDiskpartQuickAction('clear_readonly')">🔓 Clear ReadOnly</button>
+                                <button class="btn secondary" onclick="runDiskpartQuickAction('set_readonly')">🔒 Set ReadOnly (Forense)</button>
+                                <button class="btn secondary" onclick="runDiskpartQuickAction('create_primary_max')">➕ Criar Partição Primária 100%</button>
+                                <button class="btn secondary" onclick="runDiskpartQuickAction('mark_active')">⭐ Marcar Ativa (Active MBR)</button>
+                                <button class="btn secondary" onclick="runDiskpartQuickAction('extend_volume')">📐 Estender Volume</button>
+                                <button class="btn danger" onclick="runDiskpartQuickAction('convert_gpt')">🔄 Clean + Convert GPT</button>
+                                <button class="btn danger" onclick="runDiskpartQuickAction('convert_mbr')">🔄 Clean + Convert MBR</button>
+                                <button class="btn danger" onclick="runDiskpartQuickAction('clean_disk')">🧹 DiskPart CLEAN</button>
+                                <button class="btn danger" onclick="runDiskpartQuickAction('clean_all_zero')">🔥 CLEAN ALL (Zero-Fill)</button>
+                            </div>
+                            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                                <input type="text" id="dpActionConfirmInput" class="text-input" placeholder="Confirmação p/ Clean/Convert: digite CONFIRMAR" />
+                            </div>
+                            <textarea id="dpCustomScriptInput" class="text-input" rows="2" placeholder="Script DiskPart customizado (ex: list disk &#10;select disk 3 &#10;detail disk)" style="width:100%;font-family:monospace;font-size:12px;margin-bottom:6px;"></textarea>
+                            <button class="btn secondary" onclick="runDiskpartCustomScript()">💻 Executar Script no DiskPart</button>
+                        </div>
+
+                        <!-- SUB-CARD 4: CRIADOR DE DISCO / PENDRIVE BOOTÁVEL UNIVERSAL -->
+                        <div class="maint-card" style="border-top:3px solid #ec4899;">
+                            <h4>🚀 4. Criador de Disco / Pendrive Bootável Universal (ISO Windows 10/11, WinPE, Hiren's, Linux)</h4>
+                            <p class="muted" style="font-size:12px;margin-bottom:8px;">
+                                Prepara automaticamente a tabela de partições de boot (UEFI GPT ou Legacy BIOS MBR Ativa), grava o setor de boot (<code>bootsect /nt60</code>) e, se você informar o caminho de uma imagem <code>.ISO</code>, monta a ISO e copia todos os arquivos de instalação!
+                            </p>
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+                                <select id="dpBootSchemeSelect" class="text-input">
+                                    <option value="UEFI_GPT">UEFI Moderno (GPT)</option>
+                                    <option value="LEGACY_MBR">Legacy BIOS / CSM (MBR Ativa)</option>
+                                </select>
+                                <select id="dpBootFsSelect" class="text-input">
+                                    <option value="NTFS">NTFS (Suporta WIM &gt;4GB)</option>
+                                    <option value="FAT32">FAT32 (UEFI Padrão)</option>
+                                    <option value="EXFAT">exFAT</option>
+                                </select>
+                                <input type="text" id="dpBootLabelInput" class="text-input" value="AEGIS_BOOT" placeholder="Rótulo (AEGIS_BOOT)" />
+                            </div>
+                            <input type="text" id="dpBootIsoPathInput" class="text-input" placeholder="Caminho opcional do arquivo .ISO (ex: D:\ISOs\Win11_PTBR.iso — ou vazio só p/ preparar o boot)" style="width:100%;margin-bottom:8px;" />
+                            <div style="display:flex;gap:8px;">
+                                <input type="text" id="dpBootConfirmInput" class="text-input" placeholder="Digite CRIAR_BOOT ou FORMATAR" style="max-width:230px;" />
+                                <button class="btn primary" style="background:#ec4899;" onclick="runCreateBootableDrive()">🚀 Criar Disco / Pendrive Bootável Agora</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SAÍDA EM TEMPO REAL DO DISKPART / STORAGE API -->
+                    <div id="diskpartConsoleOutput" style="background:#020617;border:1px solid #334155;border-radius:8px;padding:10px;font-family:monospace;font-size:12px;color:#38bdf8;max-height:220px;overflow-y:auto;white-space:pre-wrap;">[Console DiskPart Supremo Pronto] Selecione o disco na tabela acima (ex: Disk #3 Sem Letra) e clique em "⚡ FORÇAR DESBLOQUEIO TOTAL &amp; TORNAR UTILIZÁVEL" ou escolha uma operação de formatação/boot.</div>
                 </div>
 
                 <!-- 7. DIAGNÓSTICO ESPECIALIZADO DE ERROS & 8. PARTIÇÕES E SISTEMAS DE ARQUIVOS -->

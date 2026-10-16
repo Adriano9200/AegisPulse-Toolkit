@@ -40,9 +40,10 @@ def get_storage_db_path(base_dir: Path) -> Path:
 
 def init_storage_db(base_dir: Path) -> None:
     db_path = get_storage_db_path(base_dir)
-    with sqlite3.connect(db_path) as conn:
+    conn = sqlite3.connect(db_path)
+    try:
         conn.execute(
-            """
+            '''
             CREATE TABLE IF NOT EXISTS disk_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 device_uid TEXT NOT NULL,
@@ -65,16 +66,16 @@ def init_storage_db(base_dir: Path) -> None:
                 risk_level TEXT,
                 summary_json TEXT
             )
-            """
+            '''
         )
         conn.execute(
-            """
+            '''
             CREATE INDEX IF NOT EXISTS idx_snapshots_uid
             ON disk_snapshots (device_uid, id DESC)
-            """
+            '''
         )
         conn.execute(
-            """
+            '''
             CREATE TABLE IF NOT EXISTS storage_operations_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
@@ -85,9 +86,11 @@ def init_storage_db(base_dir: Path) -> None:
                 summary TEXT NOT NULL,
                 details_json TEXT
             )
-            """
+            '''
         )
         conn.commit()
+    finally:
+        conn.close()
 
 
 def log_storage_operation(
@@ -102,13 +105,14 @@ def log_storage_operation(
     init_storage_db(base_dir)
     db_path = get_storage_db_path(base_dir)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with sqlite3.connect(db_path) as conn:
+    conn = sqlite3.connect(db_path)
+    try:
         conn.execute(
-            """
+            '''
             INSERT INTO storage_operations_log
             (timestamp, device_uid, operation_type, risk_level, status, summary, details_json)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
+            ''',
             (
                 now_str,
                 device_uid or "GLOBAL",
@@ -120,12 +124,15 @@ def log_storage_operation(
             ),
         )
         conn.commit()
+    finally:
+        conn.close()
 
 
 def list_storage_operations_log(base_dir: Path, device_uid: str | None = None, limit: int = 40) -> list[dict[str, Any]]:
     init_storage_db(base_dir)
     db_path = get_storage_db_path(base_dir)
-    with sqlite3.connect(db_path) as conn:
+    conn = sqlite3.connect(db_path)
+    try:
         conn.row_factory = sqlite3.Row
         if device_uid:
             rows = conn.execute(
@@ -137,6 +144,8 @@ def list_storage_operations_log(base_dir: Path, device_uid: str | None = None, l
                 "SELECT * FROM storage_operations_log ORDER BY id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
+    finally:
+        conn.close()
     out = []
     for r in rows:
         d = dict(r)
@@ -373,7 +382,8 @@ def evaluate_lifespan_and_record_history(
 
     risk_info = classify_storage_risk(device, data_importance=data_importance)
 
-    with sqlite3.connect(db_path) as conn:
+    conn = sqlite3.connect(db_path)
+    try:
         conn.row_factory = sqlite3.Row
         prev_rows = conn.execute(
             "SELECT * FROM disk_snapshots WHERE device_uid = ? ORDER BY id DESC LIMIT 15",
@@ -419,6 +429,8 @@ def evaluate_lifespan_and_record_history(
                 "SELECT * FROM disk_snapshots WHERE device_uid = ? ORDER BY id DESC LIMIT 15",
                 (uid,),
             ).fetchall()
+    finally:
+        conn.close()
 
     snapshots_history = [dict(r) for r in reversed(prev_rows)]
     degradation_alerts: list[str] = []
@@ -521,6 +533,10 @@ def build_complete_storage_suite_payload(
 
     return {
         "collected_at": forensics.get("collected_at"),
+        "system_drive_letter": forensics.get("system_drive_letter", "C:"),
+        "occupied_drive_letters": forensics.get("occupied_drive_letters", ["C:"]),
+        "query_telemetry": forensics.get("query_telemetry", {}),
+        "diskmgmt_diagnostics": forensics.get("diskmgmt_diagnostics", {}),
         "smartctl_available": forensics.get("smartctl_available"),
         "smartctl_path": forensics.get("smartctl_path"),
         "total_physical_disks": len(enriched_devices),

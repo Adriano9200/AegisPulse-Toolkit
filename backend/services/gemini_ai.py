@@ -118,6 +118,7 @@ def sanitize_snapshot_for_ai(snapshot: dict) -> dict:
             if not d.get("status_ok", True)
         ],
         "network_adapters": net.get("adapters", []),
+        "health_score": snapshot.get("health_score", {}),
     }
 
 
@@ -154,10 +155,29 @@ def generate_local_expert_analysis(ctx: dict, user_prompt: str = "", cloud_notic
         sw_names += f" e mais {len(outdated_sw) - 8} pacote(s)"
 
     lines = []
-    lines.append("[Motor Utilizado: 🧠 IA Local AegisPulse N3 v4.0 (Diagnóstico Forense Baseado em Evidências)]")
+    lines.append("[Motor Utilizado: 🧠 IA Local AegisPulse N3 v4.5 (Diagnóstico Forense & Health Score Baseado em Evidências)]")
     if cloud_notice:
         lines.append(f"[Info: {cloud_notice}]")
     lines.append("")
+    
+    hs = ctx.get("health_score") or {}
+    if hs and hs.get("overall_score") is not None:
+        lines.append("### 🩺 ÍNDICE DE SAÚDE AEGISPULSE HEALTH SCORE")
+        lines.append(f"- **Pontuação Geral:** **{hs.get('overall_score')}/100 — {hs.get('classification', 'N/D')}**")
+        lines.append(f"- **Cobertura da Avaliação:** {hs.get('coverage', {}).get('label', 'N/D')} ({hs.get('coverage', {}).get('percent', 0)}% de cobertura)")
+        if hs.get("critical_cap_applied"):
+            lines.append("  - 🚨 **Nota Limitada por Falha Crítica:** A média geral foi limitada em 59.0 para destacar problemas graves de integridade.")
+        cats = hs.get("categories") or {}
+        cat_lines = []
+        for ck, cv in cats.items():
+            if cv.get("available"):
+                cat_lines.append(f"{cv.get('category_title')}: {cv.get('score')} pts ({cv.get('status', '').upper()})")
+        if cat_lines:
+            lines.append(f"- **Desempenho por Categoria:** {' | '.join(cat_lines[:4])}")
+            if len(cat_lines) > 4:
+                lines.append(f"  {' | '.join(cat_lines[4:])}")
+        lines.append("")
+
     lines.append("### 1. DIAGNÓSTICO TÉCNICO N3 (Especialista Adriano Barboza)")
     lines.append("")
     lines.append(f"- **Equipamento Analisado:** {manuf} {model}")

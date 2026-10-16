@@ -10,6 +10,9 @@ VERSÃO:  4.0.0 (Storage Forensics, SMART, Lifespan, Assisted Recovery, CRM & Mu
 let OPERATOR_TOKEN = localStorage.getItem("aegispulse_token") || "";
 let CURRENT_SNAPSHOT = null;
 let SELECTED_STORAGE_INDEX = 0;
+let SELECTED_STORAGE_UID = "";
+let CURRENT_HEALTH_SCORE = null;
+let CURRENT_FINDINGS_FILTER = "TODOS";
 
 function showToast(msg) {
     const t = document.getElementById("statusToast");
@@ -318,14 +321,15 @@ document.getElementById("crmSearchInput").addEventListener("input", (e) => {
 });
 
 async function runFullDiagnostic() {
-    showToast("🔍 Executando varredura completa v4.0 (Hardware, Discos/SMART/TBW, Temperaturas CPU/GPU, Compatibilidade, BIOS, Drivers, Softwares, Rede & PC Gamer)...");
+    showToast("🔍 Executando varredura completa v4.5 em paralelo (Hardware, Health Score, Discos/SMART, Temperaturas, BIOS, Drivers, Softwares, Rede & PC Gamer)...");
     try {
         const data = await apiFetch("/api/scan/full");
         CURRENT_SNAPSHOT = data;
         renderDashboard(data);
-        showToast("✅ Diagnóstico Forense v4.0 concluído com sucesso!");
+        showToast("✅ Diagnóstico Forense e Health Score v4.5 concluídos com sucesso!");
     } catch (err) {
-        console.warn("Sessão aguardando autenticação ou limite Trial atingido:", err);
+        console.error("Erro na varredura /api/scan/full:", err);
+        showToast("⚠️ Erro ao coletar diagnóstico: " + (err.message || "Clique em Atualizar Diagnóstico."));
     }
 }
 
@@ -365,6 +369,20 @@ function renderDashboard(data) {
     const stRisk = storageSuite.highest_risk_level || "BAIXO";
     document.getElementById("kpiAlerts").textContent = `Risco Discos: ${stRisk} | ${sw.outdated_count || 0} Apps | ${gaming.missing_dlls_count || 0} DLLs`;
     document.getElementById("kpiBiosStatus").textContent = `BIOS ${bios.smbios_version} (${bios.status_label})`;
+
+    const hs = data.health_score || {};
+    if (hs && hs.overall_score != null) {
+        const hsScoreEl = document.getElementById("kpiHealthScore");
+        const hsCovEl = document.getElementById("kpiHealthCoverage");
+        if (hsScoreEl) {
+            hsScoreEl.textContent = `${hs.overall_score}/100`;
+            hsScoreEl.style.color = hs.classification_color || "#10b981";
+        }
+        if (hsCovEl) {
+            hsCovEl.textContent = `${hs.classification} (${hs.coverage?.label || '8/8'})`;
+        }
+        renderHealthScoreTab(hs);
+    }
 
     const firstCpu = (hw.cpus && hw.cpus[0]) ? hw.cpus[0].name : "Processador N/D";
 
@@ -501,8 +519,17 @@ function renderStorageSuiteTab(storageSuite) {
         return;
     }
 
-    if (SELECTED_STORAGE_INDEX >= devs.length) {
+    if (SELECTED_STORAGE_UID) {
+        const foundIdx = devs.findIndex(d => d.device_uid === SELECTED_STORAGE_UID);
+        if (foundIdx >= 0) {
+            SELECTED_STORAGE_INDEX = foundIdx;
+        }
+    }
+    if (SELECTED_STORAGE_INDEX >= devs.length || SELECTED_STORAGE_INDEX < 0) {
         SELECTED_STORAGE_INDEX = 0;
+    }
+    if (devs[SELECTED_STORAGE_INDEX]) {
+        SELECTED_STORAGE_UID = devs[SELECTED_STORAGE_INDEX].device_uid || "";
     }
 
     selectEl.innerHTML = devs.map((d, idx) => `
@@ -529,18 +556,32 @@ function renderStorageSuiteTab(storageSuite) {
             <td><code>${d.serial_number}</code><br><small class="muted">FW: ${d.firmware}</small></td>
             <td><strong>${d.media_category}</strong><br><small class="muted">${d.protocol}</small></td>
             <td><strong>${d.capacity?.formatted || ''}</strong><br><small class="muted">${(d.capacity?.bytes || 0).toLocaleString()} bytes</small></td>
-            <td><strong>${d.partition_style}</strong><br><small class="muted">${(d.drive_letters || []).join(", ") || "Sem Letra"}</small></td>
+            <td><strong>${d.partition_style}</strong><br>${
+    (d.drive_letters && d.drive_letters.length)
+        ? `<small class="muted"><strong>${d.drive_letters.join(", ")}</strong></small>`
+        : `<span class="badge warn" style="cursor:pointer;display:inline-block;margin-top:3px;" onclick="event.stopPropagation(); selectStorageDevice(${idx}); runDiskpartUnlock();" title="Clique para forçar desbloqueio e atribuir uma letra de unidade imediatamente">⚠️ Sem Letra (⚡ Desbloquear/Montar)</span>`
+}</td>
             <td>${stateBadges}</td>
         </tr>
         `;
     }).join("");
 
     renderSelectedStorageDevice(devs[SELECTED_STORAGE_INDEX]);
+    _renderTargetAndVdsDiagnostics(devs[SELECTED_STORAGE_INDEX], storageSuite);
     renderStorageOpsLog(storageSuite.operations_log || []);
 }
 
 function selectStorageDevice(idx) {
     SELECTED_STORAGE_INDEX = parseInt(idx, 10) || 0;
+    const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
+    if (devs[SELECTED_STORAGE_INDEX]) {
+        SELECTED_STORAGE_UID = devs[SELECTED_STORAGE_INDEX].device_uid || "";
+    }
+    // Limpa caixas de confirmação ao trocar de disco para impedir reutilização acidental em outro destino
+    ["dpFormatConfirmInput", "dpActionConfirmInput", "dpBootConfirmInput"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+    });
     if (CURRENT_SNAPSHOT && CURRENT_SNAPSHOT.storage_suite) {
         renderStorageSuiteTab(CURRENT_SNAPSHOT.storage_suite);
     }
@@ -786,13 +827,13 @@ async function runStorageTest(testType, confirmWrite = "") {
 }
 
 function runStorageWriteTestPrompt() {
-    const token = prompt(
-        "ATENÇÃO: O AegisPulse não executa testes de escrita por padrão para proteger os dados do disco.\n\n" +
-        "Para autorizar um teste controlado de escrita em arquivo temporário (bloqueado se houver falha física), digite exatamente:\n" +
-        "CONFIRMAR_ESCRITA_RISCO_DADOS"
+    const dev = getSelectedStorageDevice();
+    const ok = confirm(
+        `⚠️ TESTE DE ESCRITA E VERIFICAÇÃO EM: Disk #${dev ? dev.disk_number : ''} (${dev ? dev.model : ''})\n\n` +
+        `Deseja autorizar e forçar o teste controlado de escrita não-destrutiva nesta unidade (mesmo se houver alerta SMART)?`
     );
-    if (token !== null) {
-        runStorageTest("write_verify", token);
+    if (ok) {
+        runStorageTest("write_verify", "CONFIRMAR_ESCRITA_RISCO_DADOS");
     }
 }
 
@@ -1290,16 +1331,35 @@ document.getElementById("btnSaveConfig").addEventListener("click", async () => {
 
 // Exportar Laudo HTML / PDF
 async function exportHtmlReport() {
-    showToast("📄 Gerando Laudo Técnico Executivo HTML/PDF v4.0...");
-    const res = await apiFetch("/api/report/generate", { method: "POST" });
-    if (res.success && res.url) {
-        window.open(res.url, "_blank");
-        showToast(`✅ Relatório salvo em: ${res.report_path}`);
+    showToast("📄 Gerando e abrindo Laudo Técnico Executivo HTML/PDF v5.0...");
+    try {
+        const res = await apiFetch("/api/report/generate", { method: "POST" });
+        if (res && res.success) {
+            const rBox = document.getElementById("reportStatusBox");
+            if (rBox) {
+                rBox.innerHTML = `
+                    <div style="padding:10px;background:rgba(16,185,129,0.12);border:1px solid #10b981;border-radius:8px;">
+                        <strong style="color:#10b981;">✅ Laudo Gerado e Aberto no Navegador!</strong><br>
+                        <span>Arquivo salvo em: <code>${res.report_path}</code></span><br>
+                        <div style="margin-top:8px;display:flex;gap:8px;">
+                            <a href="${res.url}" target="_blank" class="btn primary" style="text-decoration:none;display:inline-block;">🌐 Abrir Laudo HTML</a>
+                            <a href="${res.url}" download="${res.filename || 'Laudo_AegisPulse.html'}" class="btn secondary" style="text-decoration:none;display:inline-block;">⬇️ Baixar Cópia do Laudo</a>
+                        </div>
+                    </div>
+                `;
+            }
+            showToast(`✅ Laudo aberto automaticamente e salvo em: ${res.report_path}`);
+            syncActionLogs(res);
+        }
+    } catch (e) {
+        showToast("❌ Erro ao gerar relatório: " + e.message);
     }
 }
 
 document.getElementById("btnRescan").addEventListener("click", runFullDiagnostic);
 document.getElementById("btnExportHtml").addEventListener("click", exportHtmlReport);
+const btnExpTab = document.getElementById("btnExportHtmlTab");
+if (btnExpTab) btnExpTab.addEventListener("click", exportHtmlReport);
 
 (async function init() {
     try {
@@ -1326,3 +1386,653 @@ document.getElementById("btnExportHtml").addEventListener("click", exportHtmlRep
         console.error(e);
     }
 })();
+
+// ==================== CONTROLADOR AEGISPULSE HEALTH SCORE (v4.5) ====================
+
+function renderHealthScoreTab(hs) {
+    if (!hs) return;
+    CURRENT_HEALTH_SCORE = hs;
+
+    const scoreBig = document.getElementById("hsOverallScoreBig");
+    if (scoreBig) {
+        scoreBig.textContent = `${hs.overall_score}`;
+        scoreBig.style.color = hs.classification_color || "#10b981";
+    }
+
+    const classBadge = document.getElementById("hsClassBadge");
+    if (classBadge) {
+        classBadge.textContent = hs.classification ? hs.classification.toUpperCase() : "DESCONHECIDO";
+        classBadge.className = `badge ${hs.classification_badge || 'ok'}`;
+    }
+
+    const covCount = document.getElementById("hsCoverageCountText");
+    if (covCount) covCount.textContent = hs.coverage?.label || "—";
+
+    const covPct = document.getElementById("hsCoveragePctText");
+    if (covPct) covPct.textContent = `${hs.coverage?.percent || 0}% de cobertura analítica`;
+
+    const uuidTxt = document.getElementById("hsMachineUuidText");
+    if (uuidTxt) uuidTxt.textContent = hs.machine_uuid || "—";
+
+    const hostTxt = document.getElementById("hsHostText");
+    if (hostTxt) hostTxt.textContent = `Host: ${hs.hostname || 'Local'}`;
+
+    const dateTxt = document.getElementById("hsEvaluatedAtText");
+    if (dateTxt) dateTxt.textContent = `Avaliado em: ${hs.evaluated_at || '—'}`;
+
+    const capNotice = document.getElementById("hsCriticalCapNotice");
+    if (capNotice) {
+        if (hs.critical_cap_applied) {
+            capNotice.innerHTML = "🚨 <strong>TRAVA CRÍTICA ATIVA:</strong> Nota limitada a 59 (Ruim) devido a falha crítica de hardware/dados.";
+            capNotice.style.color = "#ef4444";
+        } else if (hs.has_critical_issue) {
+            capNotice.innerHTML = "⚠️ <strong>ALERTA:</strong> Há falha grave identificada nos achados técnicos.";
+            capNotice.style.color = "#f97316";
+        } else {
+            capNotice.innerHTML = "✅ <strong>NORMAL:</strong> Nenhuma falha crítica de hardware ou perda de dados detectada.";
+            capNotice.style.color = "#34d399";
+        }
+    }
+
+    // 8 Categorias Ponderadas
+    const catsGrid = document.getElementById("hsCategoriesGrid");
+    if (catsGrid) {
+        catsGrid.innerHTML = Object.entries(hs.categories || {}).map(([ck, cv]) => {
+            const bCls = cv.status === "critico" ? "err" : (cv.status === "atencao" ? "warn" : "ok");
+            const scDisplay = cv.available ? `${cv.score}/100` : "Indisponível";
+            const barFill = cv.available ? cv.score : 0;
+            const barColor = cv.status === "critico" ? "#ef4444" : (cv.status === "atencao" ? "#f59e0b" : "#10b981");
+
+            return `
+            <div class="maint-card" style="border-top:3px solid ${barColor};">
+                <div class="flex-between">
+                    <strong>${cv.category_title || ck}</strong>
+                    <span class="badge ${bCls}">${(cv.status || 'normal').toUpperCase()}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0 4px;">
+                    <span style="font-size:18px;font-weight:700;color:${barColor};">${scDisplay}</span>
+                    <small class="muted">Peso: ${cv.effective_weight_pct || 0}%</small>
+                </div>
+                <div class="bar-bg" style="width:100%;height:8px;margin-bottom:8px;">
+                    <div class="bar-fill" style="background-color:${barColor} !important;width:${barFill}%;"></div>
+                </div>
+                <p class="muted" style="font-size:12px;margin:0;">${cv.summary || 'Sem observações.'}</p>
+            </div>
+            `;
+        }).join("");
+    }
+
+    // Achados e Trilha de Auditoria
+    renderFindingsTable(hs.prioritized_findings || []);
+    renderAuditTrailTable(hs.audit_trail?.deductions_detail || []);
+    loadHealthScoreHistory();
+}
+
+function renderFindingsTable(findings) {
+    const tbody = document.getElementById("hsFindingsTableBody");
+    if (!tbody) return;
+
+    // Atualiza contadores dos filtros
+    const allCount = findings.length;
+    const critCount = findings.filter(f => f.severity === "CRÍTICO").length;
+    const highCount = findings.filter(f => f.severity === "ALTO").length;
+    const medCount = findings.filter(f => f.severity === "MÉDIO").length;
+
+    const elAll = document.getElementById("countFindingsAll");
+    if (elAll) elAll.textContent = allCount;
+    const elCrit = document.getElementById("countFindingsCrit");
+    if (elCrit) elCrit.textContent = critCount;
+    const elHigh = document.getElementById("countFindingsHigh");
+    if (elHigh) elHigh.textContent = highCount;
+    const elMed = document.getElementById("countFindingsMed");
+    if (elMed) elMed.textContent = medCount;
+
+    const filtered = CURRENT_FINDINGS_FILTER === "TODOS"
+        ? findings
+        : findings.filter(f => f.severity === CURRENT_FINDINGS_FILTER);
+
+    if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7">Nenhum problema encontrado neste nível de severidade.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(f => {
+        const bCls = f.severity === "CRÍTICO" ? "err" : (f.severity === "ALTO" ? "warn" : "ok");
+        const rCls = (f.action_risk_level || "").includes("ALTO") ? "err" : ((f.action_risk_level || "").includes("MODERADO") ? "warn" : "ok");
+
+        return `
+        <tr>
+            <td><strong>${f.title}</strong><br><small class="muted">${f.affected_component}</small></td>
+            <td><span class="badge ${bCls}">${f.severity}</span></td>
+            <td><small>${f.probable_impact}</small></td>
+            <td><code>${f.technical_evidence}</code></td>
+            <td><small>${f.confidence}</small></td>
+            <td><strong>${f.recommendation}</strong></td>
+            <td><span class="badge ${rCls}">${f.action_risk_level}</span></td>
+        </tr>
+        `;
+    }).join("");
+}
+
+function filterFindings(sev, btn) {
+    CURRENT_FINDINGS_FILTER = sev;
+    if (btn && btn.parentElement) {
+        btn.parentElement.querySelectorAll(".btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+    }
+    if (CURRENT_HEALTH_SCORE) {
+        renderFindingsTable(CURRENT_HEALTH_SCORE.prioritized_findings || []);
+    }
+}
+
+function renderAuditTrailTable(deductions) {
+    const tbody = document.getElementById("hsAuditTableBody");
+    if (!tbody) return;
+    if (!deductions || !deductions.length) {
+        tbody.innerHTML = '<tr><td colspan="3">Nenhuma penalidade aplicada. A máquina obteve nota máxima nas categorias disponíveis!</td></tr>';
+        return;
+    }
+    tbody.innerHTML = deductions.map(d => `
+        <tr>
+            <td><strong>${d.category_title}</strong></td>
+            <td><span class="badge err">-${d.points} pts</span></td>
+            <td>${d.reason}</td>
+        </tr>
+    `).join("");
+}
+
+async function loadHealthScoreHistory() {
+    try {
+        const res = await apiFetch("/api/health-score/history?limit=15");
+        const items = res.items || [];
+        const tbody = document.getElementById("hsHistoryTableBody");
+        if (tbody) {
+            tbody.innerHTML = items.map(it => `
+                <tr>
+                    <td><code>${it.evaluated_at}</code></td>
+                    <td><strong>${it.overall_score}</strong></td>
+                    <td><span class="badge ${it.classification_badge || 'ok'}">${it.classification}</span></td>
+                    <td>${it.coverage?.label || '8/8'}</td>
+                    <td>${it.has_critical_issue ? '<span class="badge err">SIM</span>' : '<span class="badge ok">Não</span>'}</td>
+                    <td><button class="btn secondary" onclick="viewHistoricalHealthScore(${it.id})">🔍 Ver</button></td>
+                </tr>
+            `).join("") || '<tr><td colspan="6">Nenhuma avaliação anterior no banco SQLite.</td></tr>';
+        }
+        renderHealthScoreChart(res.chart_series || []);
+    } catch (e) {
+        console.warn("Falha ao carregar histórico de Health Score:", e);
+    }
+}
+
+function renderHealthScoreChart(series) {
+    const box = document.getElementById("hsHistoryChartBox");
+    if (!box) return;
+    if (!series || series.length < 1) {
+        box.innerHTML = '<p class="muted">Sem coletas suficientes no histórico SQLite.</p>';
+        return;
+    }
+    const w = 460;
+    const h = 110;
+    const pts = series.slice(-12);
+    const stepX = pts.length > 1 ? (w - 40) / (pts.length - 1) : 0;
+
+    const coords = pts.map((p, i) => {
+        const x = 20 + i * stepX;
+        const val = Math.min(100, Math.max(0, Number(p.score || 0)));
+        const y = h - 20 - (val / 100) * (h - 36);
+        return `${x},${y.toFixed(1)}`;
+    }).join(" ");
+
+    box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-bottom:6px;">
+            <span>📈 Série Temporal Health Score (${pts.length} coletas registradas)</span>
+            <span><strong style="color:#10b981;">● Pontuação (0–100)</strong></span>
+        </div>
+        <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:110px;overflow:visible;">
+            <line x1="20" y1="${h - 20}" x2="${w - 20}" y2="${h - 20}" stroke="#334155" stroke-width="1"/>
+            <line x1="20" y1="${h - 20 - 0.6 * (h - 36)}" x2="${w - 20}" y2="${h - 20 - 0.6 * (h - 36)}" stroke="#f59e0b" stroke-width="0.7" stroke-dasharray="3,3"/>
+            <line x1="20" y1="${h - 20 - 0.9 * (h - 36)}" x2="${w - 20}" y2="${h - 20 - 0.9 * (h - 36)}" stroke="#10b981" stroke-width="0.7" stroke-dasharray="3,3"/>
+            ${pts.length > 1 ? `<polyline fill="none" stroke="#10b981" stroke-width="2.5" points="${coords}"/>` : ''}
+            ${pts.map((p, i) => {
+                const x = 20 + i * stepX;
+                const val = Math.min(100, Math.max(0, Number(p.score || 0)));
+                const y = h - 20 - (val / 100) * (h - 36);
+                const color = val >= 75 ? "#10b981" : (val >= 60 ? "#f59e0b" : "#ef4444");
+                return `<circle cx="${x}" cy="${y.toFixed(1)}" r="4" fill="${color}"><title>${p.date}: ${p.score} pts (${p.classification})</title></circle>`;
+            }).join("")}
+        </svg>
+    `;
+}
+
+// Event Listeners do Health Score
+const btnEvalHs = document.getElementById("btnEvaluateHealthScore");
+if (btnEvalHs) {
+    btnEvalHs.addEventListener("click", async () => {
+        showToast("🩺 Recalculando Índice de Saúde Health Score e avaliando 8 categorias...");
+        try {
+            const res = await apiFetch("/api/health-score/evaluate", { method: "POST" });
+            if (res.health_score) {
+                renderHealthScoreTab(res.health_score);
+                showToast(`✅ Health Score calculado: ${res.health_score.overall_score}/100 (${res.health_score.classification})!`);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    });
+}
+
+const btnCompHs = document.getElementById("btnCompareHealthScore");
+if (btnCompHs) {
+    btnCompHs.addEventListener("click", async () => {
+        showToast("📊 Consultando comparação temporal com avaliação anterior...");
+        try {
+            const res = await apiFetch("/api/health-score/compare");
+            if (res.success && res.comparison) {
+                renderHealthScoreComparison(res.comparison);
+            } else {
+                showToast(res.message || "Histórico insuficiente para comparação.");
+            }
+        } catch (e) {
+            showToast("Necessário ao menos 1 avaliação anterior salva no SQLite.");
+        }
+    });
+}
+
+function renderHealthScoreComparison(comp) {
+    const panel = document.getElementById("hsComparisonPanel");
+    if (!panel) return;
+    panel.classList.remove("hidden");
+
+    document.getElementById("hsCompareTrendSummary").innerHTML = `<strong>${comp.trend_label}:</strong> ${comp.trend_summary}`;
+
+    const deltaSign = comp.score_delta > 0 ? `+${comp.score_delta}` : `${comp.score_delta}`;
+    const scoreDeltaEl = document.getElementById("hsDiffScoreDelta");
+    if (scoreDeltaEl) {
+        scoreDeltaEl.textContent = `${deltaSign} pts`;
+        scoreDeltaEl.style.color = comp.score_delta >= 0 ? "#10b981" : "#ef4444";
+    }
+
+    const diffDatesEl = document.getElementById("hsDiffDates");
+    if (diffDatesEl) diffDatesEl.textContent = `${comp.older_date} ➔ ${comp.newer_date}`;
+
+    const covDeltaEl = document.getElementById("hsDiffCoverageDelta");
+    if (covDeltaEl) covDeltaEl.textContent = `${comp.coverage_delta > 0 ? '+' : ''}${comp.coverage_delta}%`;
+
+    const newCntEl = document.getElementById("hsDiffNewCount");
+    if (newCntEl) newCntEl.textContent = (comp.new_findings || []).length;
+
+    const resCntEl = document.getElementById("hsDiffResolvedCount");
+    if (resCntEl) resCntEl.textContent = (comp.resolved_findings || []).length;
+
+    const detailsBox = document.getElementById("hsDiffDetailsList");
+    if (detailsBox) {
+        let rows = "";
+        for (const f of (comp.new_findings || [])) {
+            rows += `<div class="kv-row"><span class="badge err">NOVO ALERTA</span><strong>${f.title}</strong> (${f.affected_component})</div>`;
+        }
+        for (const f of (comp.resolved_findings || [])) {
+            rows += `<div class="kv-row"><span class="badge ok">PROBLEMA RESOLVIDO</span><strong>${f.title}</strong> (${f.affected_component})</div>`;
+        }
+        if (!rows) {
+            rows = '<p class="muted" style="margin:4px 0;">Nenhum problema novo ou resolvido. Conjunto de alertas permaneceu idêntico.</p>';
+        }
+        detailsBox.innerHTML = rows;
+    }
+}
+
+const btnToggleAudit = document.getElementById("btnToggleAuditTrail");
+if (btnToggleAudit) {
+    btnToggleAudit.addEventListener("click", () => {
+        const p = document.getElementById("hsAuditPanel");
+        if (p) p.classList.toggle("hidden");
+    });
+}
+
+
+// ============================================================================
+// v5.0 — CENTRAL SUPREMA DISKPART, DESBLOQUEIO FORÇADO, FORMATAÇÃO & BOOTÁVEL
+// ============================================================================
+
+
+
+function _renderTargetAndVdsDiagnostics(dev, storageSuite) {
+    const banner = document.getElementById("dpTargetSummaryBanner");
+    const vdsBox = document.getElementById("vdsHealthDiagnosticBox");
+    const occupied = storageSuite?.occupied_drive_letters || ["C:"];
+
+    // Atualiza seletor de letras marcando e desabilitando letras já ocupadas (ex: C:, D:, E:, F:, P:)
+    const letterSel = document.getElementById("dpDesiredLetterSelect");
+    if (letterSel) {
+        Array.from(letterSel.options).forEach(opt => {
+            if (opt.value === "AUTO") return;
+            const fmt = `${opt.value}:`.toUpperCase();
+            const isUsed = occupied.includes(fmt);
+            opt.disabled = isUsed;
+            opt.textContent = isUsed ? `Letra ${fmt} (Já Ocupada)` : `Letra ${fmt} (Livre)`;
+        });
+        if (letterSel.selectedOptions[0]?.disabled) {
+            letterSel.value = "AUTO";
+        }
+    }
+
+    if (banner && dev) {
+        const isSys = Boolean(dev.is_system_disk || dev.contains_windows_volume || dev.contains_efi_boot_partition || dev.is_protected_from_destruction);
+        const borderCol = isSys ? "#ef4444" : "#10b981";
+        const bgCol = isSys ? "rgba(239,68,68,0.10)" : "rgba(16,185,129,0.08)";
+        const statusTitle = isSys
+            ? `🔒 DISCO PROTEGIDO PELO SISTEMA — OPERAÇÕES DESTRUTIVAS E FORÇADAS BLOQUEADAS`
+            : `✅ DESTINO ELEGÍVEL PARA MANUTENÇÃO, DESBLOQUEIO OU FORMATAÇÃO`;
+        const reasonsHtml = (dev.protection_reasons && dev.protection_reasons.length)
+            ? `<div style="margin-top:4px;color:#fca5a5;font-size:12px;"><strong>Motivo(s) do Bloqueio:</strong> ${dev.protection_reasons.join(" | ")}</div>`
+            : "";
+
+        const partsSummary = (dev.partitions || []).map(p =>
+            `Partição #${p.partition_number}: <strong>${p.drive_letter}</strong> (${p.filesystem} | ${p.partition_role || p.type} | ${p.capacity?.formatted || ''})`
+        ).join(" • ") || "0 Partições Reconhecidas (Não Inicializado / Espaço Bruto)";
+
+        banner.style.borderColor = borderCol;
+        banner.style.background = bgCol;
+        banner.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <div>
+                    <strong style="color:${borderCol};font-size:13.5px;">${statusTitle}</strong><br>
+                    <span style="font-size:13px;">
+                        🎯 <strong>Destino Selecionado:</strong> <code>Disk #${dev.disk_number} (${dev.device_path})</code> —
+                        <strong>${dev.brand} ${dev.model}</strong> | Série: <code>${dev.serial_number}</code> |
+                        Hash ID: <code>${dev.hardware_identity_hash || 'N/D'}</code> |
+                        Capacidade: <strong>${dev.capacity?.formatted || ''}</strong>
+                    </span>
+                </div>
+                <span class="badge ${isSys ? 'err' : 'ok'}">${isSys ? 'PROTEGIDO (WINDOWS / EFI)' : `DISK #${dev.disk_number} SELECIONADO`}</span>
+            </div>
+            <div style="margin-top:6px;font-size:12px;color:#cbd5e1;">
+                <strong>Partições &amp; Volumes no Destino:</strong> ${partsSummary}
+            </div>
+            ${reasonsHtml}
+        `;
+    }
+
+    if (vdsBox) {
+        const diag = storageSuite?.diskmgmt_diagnostics || {};
+        const isDeg = diag.status === "degraded_or_blocked" || diag.vds_timeout_reached;
+        const col = isDeg ? "#f59e0b" : "#10b981";
+        const evList = (diag.evidence || []).map(e => `<li>${e}</li>`).join("");
+        const recList = (diag.recommended_safe_actions || []).map(r => `<li><strong>Ação Segura:</strong> ${r}</li>`).join("");
+        vdsBox.style.borderColor = col;
+        vdsBox.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <strong style="color:${col};">🩺 Diagnóstico do Subsistema de Disco &amp; Gerenciamento de Disco (diskmgmt.msc / VDS)</strong>
+                <small class="muted">WMI: ${diag.wmi_query_ms ?? 0} ms | VDS: ${diag.vds_query_ms ?? 0} ms | Serviço VDS: ${diag.vds_service_status || 'Running'}</small>
+            </div>
+            <div style="margin-top:4px;color:#e2e8f0;">${diag.summary || 'Subsistema operacional.'}</div>
+            ${evList ? `<ul style="margin:6px 0 0 18px;padding:0;color:#cbd5e1;">${evList}${recList}</ul>` : ''}
+        `;
+    }
+}
+
+function getSelectedStorageDevice() {
+    const devs = CURRENT_SNAPSHOT?.storage_suite?.devices || [];
+    if (SELECTED_STORAGE_INDEX >= 0 && SELECTED_STORAGE_INDEX < devs.length) {
+        return devs[SELECTED_STORAGE_INDEX];
+    }
+    return devs[0] || null;
+}
+
+function _updateDiskpartConsole(title, res) {
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (!box) return;
+    const lines = [];
+    lines.push(`=== ${title} (Disk #${res.disk_number ?? ''}) ===`);
+    if (res.message) lines.push(res.message);
+    if (Array.isArray(res.steps_log) && res.steps_log.length) {
+        lines.push("--- Etapas Executadas ---");
+        res.steps_log.forEach(s => lines.push(s));
+    }
+    if (res.powershell_output) {
+        lines.push("--- Saída Storage API / PowerShell ---");
+        lines.push(res.powershell_output);
+    }
+    if (res.diskpart_script) {
+        lines.push("--- Script DiskPart Enviado ---");
+        lines.push(res.diskpart_script);
+    }
+    if (res.diskpart_output) {
+        lines.push("--- Saída Nativa diskpart.exe ---");
+        lines.push(res.diskpart_output);
+    }
+    box.textContent = lines.join("\n");
+    box.style.borderColor = res.success ? "#10b981" : "#ef4444";
+    box.style.color = res.success ? "#34d399" : "#fca5a5";
+    box.scrollTop = 0;
+    try { box.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
+}
+
+function _applyRefreshedStorageSuite(res) {
+    if (res && res.storage_suite && Array.isArray(res.storage_suite.devices)) {
+        if (!CURRENT_SNAPSHOT) CURRENT_SNAPSHOT = {};
+        CURRENT_SNAPSHOT.storage_suite = res.storage_suite;
+        renderStorageSuiteTab(res.storage_suite);
+    }
+    syncActionLogs(res);
+}
+
+async function runDiskpartUnlock() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const initRaw = document.getElementById("dpInitIfRawCheckbox")?.checked ?? true;
+    showToast(`⚡ Forçando desbloqueio total, remoção de Read-Only e atribuição de letra em Disk #${dev.disk_number} (${dev.model})...`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Executando desbloqueio agressivo via DiskPart + Storage API em Disk #${dev.disk_number} (${dev.model})...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/unlock", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                initialize_if_raw: initRaw
+            })
+        });
+        _updateDiskpartConsole("DESBLOQUEIO FORÇADO & MONTAGEM", res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Disco desbloqueado e montado com sucesso!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro no desbloqueio: ${e.message}`;
+    }
+}
+
+async function runDiskpartAssignLetter() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const letter = "AUTO";
+    showToast(`🔤 Atribuindo letra (${letter}) para Disk #${dev.disk_number} (${dev.model})...`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Forçando montagem e atribuição de letra (${letter}) em Disk #${dev.disk_number}...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/assign-letter", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                desired_letter: letter,
+                partition_number: 0
+            })
+        });
+        _updateDiskpartConsole(`ATRIBUIÇÃO DE LETRA (${letter})`, res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Letra atribuída com sucesso!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro ao atribuir letra: ${e.message}`;
+    }
+}
+
+async function runDiskpartFormat() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const fs = document.getElementById("dpFormatFsSelect")?.value || "NTFS";
+    const style = document.getElementById("dpFormatStyleSelect")?.value || "GPT";
+    const label = document.getElementById("dpFormatLabelInput")?.value || "AEGIS_DISK";
+    const quick = document.getElementById("dpFormatQuickCheckbox")?.checked ?? true;
+    const fullRep = document.getElementById("dpFormatFullRepartitionCheckbox")?.checked ?? true;
+    const letter = "AUTO";
+    let confirmTok = document.getElementById("dpFormatConfirmInput")?.value || "";
+
+    if (confirmTok.trim().toUpperCase() !== "FORMATAR") {
+        const p = prompt(
+            `⚠️ ATENÇÃO: Você está prestes a formatar o Disco #${dev.disk_number} (${dev.brand} ${dev.model} — ${dev.capacity?.formatted || ''}) em ${fs} (${style}).\n\n` +
+            `Todos os dados desta unidade serão apagados e ela receberá uma letra de unidade limpa.\n` +
+            `Digite exatamente FORMATAR para confirmar:`
+        );
+        if (!p) return;
+        confirmTok = p.trim();
+        const inp = document.getElementById("dpFormatConfirmInput");
+        if (inp) inp.value = confirmTok;
+    }
+
+    showToast(`💿 Formatando Disk #${dev.disk_number} (${dev.model}) em ${fs} e atribuindo letra... aguarde!`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Executando DiskPart Format (${fs} / ${style}) em Disk #${dev.disk_number} (${dev.model})...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/format", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                filesystem: fs,
+                volume_label: label,
+                quick_format: quick,
+                partition_style: style,
+                full_repartition: fullRep,
+                desired_letter: letter,
+                confirm_token: confirmTok,
+                confirm_device_uid: dev.device_uid
+            })
+        });
+        _updateDiskpartConsole(`FORMATAÇÃO SUPREMA (${fs})`, res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Formatação concluída!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro na formatação: ${e.message}`;
+    }
+}
+
+async function runDiskpartQuickAction(actionName) {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    let confirmTok = document.getElementById("dpActionConfirmInput")?.value || "";
+    const destructive = ["clean_disk", "clean_all_zero", "convert_gpt", "convert_mbr"];
+
+    if (destructive.includes(actionName) && !["CONFIRMAR", "FORMATAR", "LIMPAR"].includes(confirmTok.trim().toUpperCase())) {
+        const p = prompt(
+            `⚠️ A operação DiskPart '${actionName.toUpperCase()}' vai limpar/reconverter a tabela de partições do Disco #${dev.disk_number} (${dev.model}).\n\n` +
+            `Digite CONFIRMAR para executar:`
+        );
+        if (!p) return;
+        confirmTok = p.trim();
+        const inp = document.getElementById("dpActionConfirmInput");
+        if (inp) inp.value = confirmTok;
+    }
+
+    showToast(`🛠️ Executando DiskPart [${actionName.toUpperCase()}] em Disk #${dev.disk_number}...`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Executando comando DiskPart [${actionName}] em Disk #${dev.disk_number}...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/action", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                action: actionName,
+                confirm_token: confirmTok,
+                confirm_device_uid: dev.device_uid
+            })
+        });
+        _updateDiskpartConsole(`DISKPART: ${actionName.toUpperCase()}`, res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || `Comando DiskPart ${actionName} concluído!`);
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro no DiskPart: ${e.message}`;
+    }
+}
+
+async function runDiskpartCustomScript() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const scr = document.getElementById("dpCustomScriptInput")?.value || "";
+    if (!scr.trim()) {
+        showToast("Digite os comandos DiskPart na caixa de script antes de executar.");
+        return;
+    }
+    showToast(`💻 Executando script customizado no DiskPart...`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Executando script DiskPart...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/action", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                action: "custom_script",
+                custom_script: scr,
+                confirm_token: "CONFIRMAR"
+            })
+        });
+        _updateDiskpartConsole("SCRIPT DISKPART CUSTOMIZADO", res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Script DiskPart executado!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro no script DiskPart: ${e.message}`;
+    }
+}
+
+async function runCreateBootableDrive() {
+    const dev = getSelectedStorageDevice();
+    if (!dev) return;
+    const scheme = document.getElementById("dpBootSchemeSelect")?.value || "UEFI_GPT";
+    const fs = document.getElementById("dpBootFsSelect")?.value || "NTFS";
+    const label = document.getElementById("dpBootLabelInput")?.value || "AEGIS_BOOT";
+    const isoPath = document.getElementById("dpBootIsoPathInput")?.value || "";
+    let confirmTok = document.getElementById("dpBootConfirmInput")?.value || "";
+
+    if (!["CRIAR_BOOT", "FORMATAR", "CONFIRMAR"].includes(confirmTok.trim().toUpperCase())) {
+        const p = prompt(
+            `🚀 CRIADOR DE MÍDIA BOOTÁVEL (${scheme} / ${fs}):\n` +
+            `Alvo: Disco #${dev.disk_number} (${dev.brand} ${dev.model} — ${dev.capacity?.formatted || ''})\n` +
+            (isoPath ? `ISO: ${isoPath}\n` : `Modo: Preparar Partição de Boot Ativa + Setor NT60\n`) +
+            `\nDigite CRIAR_BOOT ou FORMATAR para autorizar:`
+        );
+        if (!p) return;
+        confirmTok = p.trim();
+        const inp = document.getElementById("dpBootConfirmInput");
+        if (inp) inp.value = confirmTok;
+    }
+
+    showToast(`🚀 Criando estrutura bootável (${scheme}) em Disk #${dev.disk_number}... aguarde!`);
+    const box = document.getElementById("diskpartConsoleOutput");
+    if (box) box.textContent = `⏳ Preparando disco bootável (${scheme} / ${fs}) em Disk #${dev.disk_number} (${dev.model})...`;
+
+    try {
+        const res = await apiFetch("/api/storage/diskpart/bootable", {
+            method: "POST",
+            body: JSON.stringify({
+                disk_number: dev.disk_number,
+                device_uid: dev.device_uid,
+                iso_path: isoPath,
+                boot_scheme: scheme,
+                filesystem: fs,
+                volume_label: label,
+                confirm_token: confirmTok,
+                confirm_device_uid: dev.device_uid
+            })
+        });
+        _updateDiskpartConsole(`CRIADOR DE DISCO BOOTÁVEL (${scheme})`, res);
+        _applyRefreshedStorageSuite(res);
+        showToast(res.message || "Mídia bootável criada com sucesso!");
+    } catch (e) {
+        if (box) box.textContent = `❌ Erro ao criar mídia bootável: ${e.message}`;
+    }
+}

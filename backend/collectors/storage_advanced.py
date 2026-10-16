@@ -28,6 +28,7 @@ Etapa 1 — Inventário Avançado de Dispositivos de Armazenamento e Coleta SMAR
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
@@ -825,60 +826,195 @@ def _find_smartctl_binary() -> str | None:
     return None
 
 
-def _query_smartctl_json(smartctl_bin: str, disk_num: int) -> dict[str, Any] | None:
+def _query_smartctl_json(smartctl_bin: str, disk_num: int, is_usb: bool = False) -> dict[str, Any] | None:
+    """Sonda agressiva de SMART via smartctl testando pass-through JMicron, SAT, Realtek, ASMedia, NVMe e SCSI."""
     dev_arg = f"/dev/pd{disk_num}" if platform.system() == "Windows" else "/dev/sda"
-    try:
-        res = subprocess.run(
-            [smartctl_bin, "-a", "-j", dev_arg],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=10,
-        )
-        if res.stdout.strip():
-            return json.loads(res.stdout)
-    except Exception:
-        pass
-    return None
+    bridge_candidates = (
+        [[], ["-d", "sat"], ["-d", "sntjmicron"]]
+        if is_usb
+        else [[]]
+    )
+    best_json = None
+    for flags in bridge_candidates:
+        try:
+            res = subprocess.run(
+                [smartctl_bin, *flags, "-a", "-j", dev_arg],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=2,
+            )
+            if res.stdout.strip():
+                parsed = json.loads(res.stdout)
+                if isinstance(parsed, dict):
+                    if best_json is None:
+                        best_json = parsed
+                    # Se encontrou atributos ATA, log NVMe ou temperatura, retorna imediatamente!
+                    has_ata = bool(parsed.get("ata_smart_attributes", {}).get("table"))
+                    has_nvme = bool(parsed.get("nvme_smart_health_information_log"))
+                    has_temp = bool(parsed.get("temperature", {}).get("current"))
+                    if has_ata or has_nvme or has_temp:
+                        return parsed
+        except Exception:
+            continue
+    return best_json
 
 
 def _run_powershell_storage_probe() -> dict[str, Any] | None:
+    """
+    Coleta 100% somente-leitura (não-destrutiva) com telemetria de tempo e diagnóstico do VDS/diskmgmt.msc:
+    - Não encerra processos nem reinicia serviços automaticamente.
+    - Mede o tempo de resposta de cada camada (WMI Kernel vs Storage API vs VDS).
+    - Registra se o Virtual Disk Service (vds) atingiu timeout ou se há processos mantendo handles abertos.
+    """
     ps_script = r"""
     $ErrorActionPreference = 'SilentlyContinue'
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $swTotal = [System.Diagnostics.Stopwatch]::StartNew()
 
+    $sysDrive = if ($env:SystemDrive) { $env:SystemDrive.TrimEnd('') } else { 'C:' }
+
+    # 1. Estado dos serviços de gerenciamento de disco (Somente-Leitura)
+    $svcList = @(Get-Service -Name 'vds','PlugPlay','StorSvc' -ErrorAction SilentlyContinue | ForEach-Object {
+        @{ Name = $_.Name; Status = [string]$_.Status; StartType = [string]$_.StartType }
+    })
+    $activeProcs = @(Get-Process -Name 'diskpart','vds','vdsldr','smartctl','mmc','chkdsk' -ErrorAction SilentlyContinue | ForEach-Object {
+        @{ Name = $_.ProcessName; Id = $_.Id }
+    })
+
+    # 2. Camada Kernel/WMI (Não depende do COM do VDS)
+    $swWmi = [System.Diagnostics.Stopwatch]::StartNew()
     $wmiDisks = @(Get-CimInstance Win32_DiskDrive | Select-Object Index, DeviceID, Model, Manufacturer, SerialNumber, FirmwareRevision, InterfaceType, MediaType, Size, Partitions, Status, PNPDeviceID, Capabilities)
     $physDisks = @(Get-PhysicalDisk | Select-Object DeviceId, FriendlyName, SerialNumber, FirmwareVersion, BusType, MediaType, SpindleSpeed, HealthStatus, OperationalStatus, Size, AllocatedSize)
+    $logicalDisks = @(Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID, DriveType, VolumeName, FileSystem, Size, FreeSpace, VolumeSerialNumber)
+    $swWmi.Stop()
 
-    $relCounters = @{}
+    $wmiIndices = @($wmiDisks | ForEach-Object { [int]$_.Index })
     foreach ($pd in $physDisks) {
-        $rc = $pd | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue | Select-Object DeviceId, Temperature, TemperatureMax, PowerOnHours, StartStopCycleCount, Wear, ReadErrorsTotal, ReadErrorsUncorrected, WriteErrorsTotal, WriteErrorsUncorrected, ReadLatencyMax, WriteLatencyMax
-        if ($rc) {
-            $relCounters[[string]$pd.DeviceId] = $rc
+        $pdIdx = -1
+        if ([int]::TryParse([string]$pd.DeviceId, [ref]$pdIdx)) {
+            if ($wmiIndices -notcontains $pdIdx) {
+                $wmiDisks += [PSCustomObject]@{
+                    Index = $pdIdx
+                    DeviceID = "\.\PhysicalDrive$pdIdx"
+                    Model = $pd.FriendlyName
+                    Manufacturer = "(Unidades de disco padrão)"
+                    SerialNumber = $pd.SerialNumber
+                    FirmwareRevision = $pd.FirmwareVersion
+                    InterfaceType = [string]$pd.BusType
+                    MediaType = [string]$pd.MediaType
+                    Size = $pd.Size
+                    Partitions = 0
+                    Status = [string]$pd.OperationalStatus
+                    PNPDeviceID = "STORAGE\DISK\$pdIdx"
+                    Capabilities = @()
+                }
+            }
         }
     }
 
-    $osDisks = @(Get-Disk | Select-Object Number, FriendlyName, SerialNumber, PartitionStyle, OperationalStatus, HealthStatus, BusType, IsSystem, IsBoot, IsReadOnly, IsOffline, Size, AllocatedSize, LargestFreeExtent)
-    $parts = @(Get-Partition | Select-Object DiskNumber, PartitionNumber, DriveLetter, Size, Offset, Type, IsActive, IsBoot, IsHidden, IsReadOnly, IsSystem)
-    $vols = @(Get-Volume | Select-Object DriveLetter, FileSystemLabel, FileSystem, DriveType, HealthStatus, OperationalStatus, SizeRemaining, Size)
-    $logicalDisks = @(Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID, DriveType, VolumeName, FileSystem, Size, FreeSpace, VolumeSerialNumber)
+    # 3. Camada VDS / Storage API isolada com medição de timeout (5s)
+    $osDisks = @()
+    $parts = @()
+    $vols = @()
+    $relCounters = @{}
+    $vdsTimeout = $false
+    $swVds = [System.Diagnostics.Stopwatch]::StartNew()
+
+    $vdsJob = Start-Job -ScriptBlock {
+        $ErrorActionPreference = 'SilentlyContinue'
+        $od = @(Get-Disk | Select-Object Number, FriendlyName, SerialNumber, PartitionStyle, OperationalStatus, HealthStatus, BusType, IsSystem, IsBoot, IsReadOnly, IsOffline, Size, AllocatedSize, LargestFreeExtent, Guid, UniqueId)
+        $pt = @(Get-Partition | Select-Object DiskNumber, PartitionNumber, DriveLetter, Size, Offset, Type, GptType, IsActive, IsBoot, IsHidden, IsReadOnly, IsSystem, Guid)
+        $vl = @(Get-Volume | Select-Object DriveLetter, FileSystemLabel, FileSystem, DriveType, HealthStatus, OperationalStatus, SizeRemaining, Size, UniqueId)
+        $rcMap = @{}
+        foreach ($p in @(Get-PhysicalDisk)) {
+            $rc = $p | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue | Select-Object DeviceId, Temperature, TemperatureMax, PowerOnHours, StartStopCycleCount, Wear, ReadErrorsTotal, ReadErrorsUncorrected, WriteErrorsTotal, WriteErrorsUncorrected, ReadLatencyMax, WriteLatencyMax
+            if ($rc) { $rcMap[[string]$p.DeviceId] = $rc }
+        }
+        return @{ OsDisks = $od; Partitions = $pt; Volumes = $vl; RelCounters = $rcMap }
+    }
+
+    if (Wait-Job $vdsJob -Timeout 5) {
+        $vdsRes = Receive-Job $vdsJob
+        if ($vdsRes) {
+            $osDisks = @($vdsRes.OsDisks)
+            $parts = @($vdsRes.Partitions)
+            $vols = @($vdsRes.Volumes)
+            if ($vdsRes.RelCounters) { $relCounters = $vdsRes.RelCounters }
+        }
+    } else {
+        $vdsTimeout = $true
+    }
+    Remove-Job $vdsJob -Force -ErrorAction SilentlyContinue
+    $swVds.Stop()
+
+    # Fallback WMI se o VDS sofreu timeout (ex: diskmgmt.msc travado por I/O em disco USB externo)
+    if ($parts.Count -eq 0) {
+        $wmiParts = @(Get-CimInstance Win32_DiskPartition -ErrorAction SilentlyContinue)
+        $wmiLinks = @(Get-CimInstance Win32_LogicalDiskToPartition -ErrorAction SilentlyContinue)
+        foreach ($wp in $wmiParts) {
+            $dlFound = ""
+            foreach ($lnk in $wmiLinks) {
+                if ($lnk.Antecedent.DeviceID -eq $wp.DeviceID) {
+                    $dlFound = ($lnk.Dependent.DeviceID -replace ':', '')
+                }
+            }
+            $parts += [PSCustomObject]@{
+                DiskNumber = [int]$wp.DiskIndex
+                PartitionNumber = [int]($wp.Index + 1)
+                DriveLetter = $dlFound
+                Size = [int64]$wp.Size
+                Offset = [int64]$wp.StartingOffset
+                Type = [string]$wp.Type
+                IsActive = [bool]$wp.BootPartition
+                IsBoot = [bool]($dlFound -and ("$dlFound`:" -eq $sysDrive))
+                IsHidden = $false
+                IsReadOnly = $false
+                IsSystem = [bool]$wp.BootPartition
+            }
+        }
+    }
+
+    # Letras ocupadas no sistema (incluindo unidades lógicas, volumes e mapeamentos)
+    $occupiedLetters = @()
+    foreach ($ld in $logicalDisks) {
+        if ($ld.DeviceID) { $occupiedLetters += $ld.DeviceID.Trim().ToUpper() }
+    }
+    foreach ($v in $vols) {
+        if ($v.DriveLetter) {
+            $lStr = "$($v.DriveLetter):".ToUpper()
+            if ($occupiedLetters -notcontains $lStr) { $occupiedLetters += $lStr }
+        }
+    }
 
     $smartStatus = @(Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictStatus -ErrorAction SilentlyContinue | Select-Object InstanceName, PredictFailure, Reason)
     $smartData = @(Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictData -ErrorAction SilentlyContinue | Select-Object InstanceName, VendorSpecific)
     $smartThresh = @(Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictThresholds -ErrorAction SilentlyContinue | Select-Object InstanceName, VendorSpecific)
 
-    $diskEvents = @(Get-WinEvent -FilterHashtable @{LogName='System'; Id=@(7,9,11,51,55,129,140,153,157)} -MaxEvents 25 -ErrorAction SilentlyContinue | ForEach-Object {
+    $diskEvents = @(Get-WinEvent -FilterHashtable @{LogName='System'; Id=@(7,9,11,51,55,98,129,140,153,154,157)} -MaxEvents 25 -ErrorAction SilentlyContinue | ForEach-Object {
         @{
             Id = $_.Id
             LevelDisplayName = $_.LevelDisplayName
             ProviderName = $_.ProviderName
             TimeCreated = $_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')
-            Message = ($_.Message -replace '\r\n', ' ')
+            Message = ($_.Message -replace '
+', ' ')
         }
     })
+    $swTotal.Stop()
 
     @{
+        SystemDrive = $sysDrive
+        OccupiedDriveLetters = $occupiedLetters
+        QueryTelemetry = @{
+            wmi_duration_ms = [int]$swWmi.ElapsedMilliseconds
+            vds_duration_ms = [int]$swVds.ElapsedMilliseconds
+            total_duration_ms = [int]$swTotal.ElapsedMilliseconds
+            vds_timeout_reached = [bool]$vdsTimeout
+            services = $svcList
+            active_storage_processes = $activeProcs
+        }
         WmiDisks = $wmiDisks
         PhysicalDisks = $physDisks
         ReliabilityCounters = $relCounters
@@ -899,12 +1035,112 @@ def _run_powershell_storage_probe() -> dict[str, Any] | None:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=30,
+            timeout=16,
         )
         out = res.stdout.strip()
         return json.loads(out) if out else None
     except Exception:
         return None
+
+
+def diagnose_diskmgmt_and_vds_health(
+    devices: list[dict[str, Any]],
+    query_telemetry: dict[str, Any],
+    disk_events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Investiga com base em evidências técnicas por que o diskmgmt.msc (Gerenciamento de Disco)
+    trava ou demora a responder, sem presumir falha do SSD principal sem provas e sem executar
+    ações destrutivas ou reinícios automáticos de serviços.
+    """
+    vds_timeout = bool(query_telemetry.get("vds_timeout_reached"))
+    services = query_telemetry.get("services") or []
+    active_procs = query_telemetry.get("active_storage_processes") or []
+    vds_svc = next((s for s in services if str(s.get("Name", "")).lower() == "vds"), None)
+    vds_status = str(vds_svc.get("Status") if vds_svc else "Unknown")
+
+    blocking_reasons: list[str] = []
+    evidence_items: list[str] = []
+    recommended_safe_actions: list[str] = []
+
+    if vds_timeout:
+        blocking_reasons.append(
+            "Timeout (>5000 ms) na camada Virtual Disk Service (VDS / Get-Disk / Get-Volume): o serviço vds.exe está aguardando resposta de I/O de um barramento lento ou bloqueado."
+        )
+        evidence_items.append(f"Consulta WMI respondeu em {query_telemetry.get('wmi_duration_ms', 0)} ms, mas a consulta VDS excedeu 5000 ms (vds_timeout_reached=True).")
+
+    if vds_svc and vds_status.lower() not in ("running", "stopped", "unknown"):
+        blocking_reasons.append(f"Serviço Virtual Disk Service (vds) em estado transitório/travado: {vds_status}.")
+
+    proc_names = [str(p.get("Name", "")).lower() for p in active_procs]
+    if "diskpart" in proc_names:
+        blocking_reasons.append("Há processo(s) 'diskpart.exe' ativos mantendo o mutex COM do Virtual Disk Service, o que impede o diskmgmt.msc de carregar a lista de discos.")
+        evidence_items.append(f"Processos de armazenamento concorrentes detectados: {active_procs}")
+        recommended_safe_actions.append("Feche janelas abertas do DiskPart ou encerre processos 'diskpart.exe' órfãos antes de abrir o diskmgmt.msc.")
+
+    if "smartctl" in proc_names:
+        blocking_reasons.append("Processo 'smartctl.exe' ou rotina de autoteste SMART ativo no barramento de armazenamento.")
+        evidence_items.append("Autoteste SMART ou sonda smartctl em execução concorrente.")
+
+    # Analisa se há disco USB/externo com setores pendentes ou autoteste estendido travando o barramento VDS
+    suspect_io_disks: list[str] = []
+    healthy_nvme_sata_disks: list[str] = []
+    for d in devices:
+        sm = d.get("smart_summary") or {}
+        pend = int(sm.get("pending_sectors") or 0)
+        realloc = int(sm.get("reallocated_sectors") or 0)
+        uncorr = int(sm.get("uncorrectable_errors") or 0)
+        label = f"Disk #{d.get('disk_number')} ({d.get('model')})"
+        if pend > 0 or realloc > 0 or uncorr > 0 or d.get("is_inaccessible"):
+            suspect_io_disks.append(f"{label} [Setores Pendentes={pend}, Realocados={realloc}, Incorrigíveis={uncorr}, SemLetra={len(d.get('drive_letters') or []) == 0}]")
+        else:
+            healthy_nvme_sata_disks.append(label)
+
+    if suspect_io_disks:
+        blocking_reasons.append(
+            "Dispositivo secundário/USB com setores pendentes ou falha de leitura mantendo IRPs (I/O Request Packets) presos na fila do Windows: "
+            + "; ".join(suspect_io_disks)
+        )
+        evidence_items.append(
+            "No Windows, o diskmgmt.msc consulta todos os discos físicos sequencialmente via VDS. Quando uma unidade USB/secundária (ex: "
+            + ", ".join(suspect_io_disks)
+            + ") possui Setores Pendentes (SMART ID 197 > 0) ou está executando Autoteste SMART Estendido, a tentativa do Windows de ler o setor 0 / tabela GPT dessa unidade trava o diskmgmt.msc inteiro."
+        )
+        if healthy_nvme_sata_disks:
+            evidence_items.append(
+                "IMPORTANTE (Evidência de Integridade): Os demais discos ("
+                + ", ".join(healthy_nvme_sata_disks)
+                + ") possuem 0 setores pendentes e 0 setores realocados. O travamento do diskmgmt.msc NÃO indica defeito físico no SSD NVMe principal do Windows!"
+            )
+        recommended_safe_actions.append(
+            "Desconecte fisicamente a unidade USB/externa com setores pendentes (ou aguarde/aborte o Autoteste SMART Estendido com 'smartctl -X') e reabra o diskmgmt.msc: ele carregará instantaneamente."
+        )
+
+    io_evts = [e for e in (disk_events or []) if int(e.get("Id", 0)) in (51, 129, 153, 154, 157)]
+    if io_evts:
+        evidence_items.append(f"Encontrados {len(io_evts)} eventos de timeout/reset de I/O no Log do Sistema do Windows (Event IDs 51/129/153/157).")
+
+    if not blocking_reasons:
+        status_code = "healthy"
+        summary = "Subsistema de Gerenciamento de Disco (WMI + VDS) operacional e respondendo dentro do limite normal."
+    else:
+        status_code = "degraded_or_blocked"
+        summary = "Detectada contenção ou bloqueio de I/O afetando o Gerenciamento de Disco (diskmgmt.msc): " + " | ".join(blocking_reasons)
+
+    return {
+        "status": status_code,
+        "vds_timeout_reached": vds_timeout,
+        "vds_service_status": vds_status,
+        "wmi_query_ms": query_telemetry.get("wmi_duration_ms", 0),
+        "vds_query_ms": query_telemetry.get("vds_duration_ms", 0),
+        "active_storage_processes": active_procs,
+        "suspect_blocking_disks": suspect_io_disks,
+        "healthy_disks_confirmed": healthy_nvme_sata_disks,
+        "blocking_reasons": blocking_reasons,
+        "evidence": evidence_items,
+        "recommended_safe_actions": recommended_safe_actions,
+        "summary": summary,
+    }
 
 
 def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -913,7 +1149,9 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
         _run_powershell_storage_probe() if platform.system() == "Windows" else None
     )
 
+    is_fallback_mock = False
     if not raw or not isinstance(raw, dict):
+        is_fallback_mock = (raw_override is None and platform.system() == "Windows")
         du = shutil.disk_usage("/")
         raw = {
             "WmiDisks": [
@@ -1015,6 +1253,15 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
             "DiskEvents": [],
         }
 
+    system_drive = str(raw.get("SystemDrive") or os.environ.get("SystemDrive") or "C:").strip().rstrip("\\").upper()
+    if not system_drive.endswith(":"):
+        system_drive += ":"
+    query_telemetry = raw.get("QueryTelemetry") or {}
+    if raw.get("VolumeEnumerationTimeout") or raw.get("ServiceUnavailable"):
+        query_telemetry["vds_timeout_reached"] = True
+        if raw.get("ServiceUnavailable"):
+            query_telemetry["vds_service_unavailable"] = True
+
     wmi_disks = raw.get("WmiDisks") or []
     phys_disks = raw.get("PhysicalDisks") or []
     rel_counters = raw.get("ReliabilityCounters") or {}
@@ -1026,6 +1273,12 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
     smart_data_raw = raw.get("SmartData") or []
     smart_thresh_raw = raw.get("SmartThresholds") or []
     disk_events = raw.get("DiskEvents") or []
+
+    occupied_letters_set: set[str] = {system_drive}
+    for l_item in (raw.get("OccupiedDriveLetters") or []):
+        l_clean = str(l_item).strip().rstrip("\\").upper()
+        if l_clean:
+            occupied_letters_set.add(l_clean if l_clean.endswith(":") else f"{l_clean}:")
 
     phys_by_id = {str(p.get("DeviceId", "")).strip(): p for p in phys_disks if isinstance(p, dict)}
     phys_by_name = {(p.get("FriendlyName") or "").strip(): p for p in phys_disks if isinstance(p, dict)}
@@ -1117,26 +1370,56 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
             v_used = max(0, v_size - v_free) if v_size > 0 else 0
             v_pct = round((v_used / v_size) * 100, 1) if v_size > 0 else 0.0
 
-            if dl_raw:
-                drive_letters.append(f"{dl_raw}:")
+            dl_fmt = f"{dl_raw}:" if dl_raw else ""
+            if dl_fmt:
+                drive_letters.append(dl_fmt)
+                occupied_letters_set.add(dl_fmt)
                 used_total_bytes += v_used
                 free_total_bytes += v_free
+
+            p_type_str = str(pr.get("Type") or "Basic").strip()
+            gpt_type_str = str(pr.get("GptType") or "").strip().lower()
+            is_win_vol = bool(dl_fmt == system_drive or pr.get("IsBoot"))
+            is_efi_part = bool(
+                pr.get("IsSystem")
+                or p_type_str.upper() in ("SYSTEM", "EFI")
+                or "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" in gpt_type_str
+            )
+            is_msr_rec = bool(
+                p_type_str.upper() in ("RESERVED", "RECOVERY", "MSR")
+                or "e3c9e316-0b5c-4db8-817d-f92df00215ae" in gpt_type_str
+                or "de94bba4-06d1-4d40-a16a-bfd50179d6ac" in gpt_type_str
+            )
+            if is_win_vol:
+                p_role = "WINDOWS_OS"
+            elif is_efi_part:
+                p_role = "EFI_BOOT"
+            elif is_msr_rec:
+                p_role = "MSR_RECOVERY"
+            else:
+                p_role = "DATA_VOLUME"
 
             partitions_out.append({
                 "disk_number": disk_num,
                 "partition_number": int(pr.get("PartitionNumber") or 1),
-                "drive_letter": f"{dl_raw}:" if dl_raw else "Sem Letra",
-                "label": v_match.get("FileSystemLabel") or ("Reserva EFI/MSR/Recovery" if not dl_raw else "Volume Local"),
+                "drive_letter": dl_fmt if dl_fmt else "Sem Letra",
+                "volume_guid": str(v_match.get("UniqueId") or pr.get("Guid") or ""),
+                "label": v_match.get("FileSystemLabel") or ("Partição EFI / Boot" if is_efi_part else ("Reserva MSR/Recovery" if is_msr_rec else ("Volume Sem Letra" if not dl_raw else "Volume Local"))),
                 "filesystem": fs_name,
-                "type": str(pr.get("Type") or "Basic"),
+                "type": p_type_str,
+                "partition_role": p_role,
+                "is_windows_volume": is_win_vol,
+                "is_efi_boot_partition": is_efi_part,
+                "is_recovery_or_msr": is_msr_rec,
+                "eligible_for_letter_assignment": p_role == "DATA_VOLUME" and not is_win_vol,
                 "capacity": p_cap,
                 "used_bytes": v_used,
                 "free_bytes": v_free,
                 "used_gib": round(v_used / (1024 ** 3), 2),
                 "free_gib": round(v_free / (1024 ** 3), 2),
                 "used_percent": v_pct,
-                "is_boot": bool(pr.get("IsBoot")),
-                "is_system": bool(pr.get("IsSystem")),
+                "is_boot": bool(pr.get("IsBoot") or is_win_vol),
+                "is_system": bool(pr.get("IsSystem") or is_efi_part),
                 "is_hidden": bool(pr.get("IsHidden")),
                 "is_read_only": bool(pr.get("IsReadOnly")),
                 "is_raw": fs_name.upper() == "RAW",
@@ -1172,10 +1455,39 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
                 break
 
         sc_json = wd.get("_mock_smartctl") or (
-            _query_smartctl_json(smartctl_bin, disk_num) if smartctl_bin and raw_override is None else None
+            _query_smartctl_json(smartctl_bin, disk_num, is_usb=brand_ctrl["is_usb_bridge"]) if smartctl_bin and raw_override is None else None
         )
+        sc_ata_attrs: list[dict[str, Any]] = []
         if isinstance(sc_json, dict):
             nvme_smart_dict = sc_json.get("nvme_smart_health_information_log") or {}
+            for sc_row in (sc_json.get("ata_smart_attributes", {}).get("table") or []):
+                aid = int(sc_row.get("id") or 0)
+                if aid <= 0:
+                    continue
+                defn = SMART_ATTRIBUTE_DEFINITIONS.get(aid, {})
+                raw_obj = sc_row.get("raw") or {}
+                raw_val = int(raw_obj.get("value") or 0) if isinstance(raw_obj, dict) else int(raw_obj or 0)
+                curr_v = int(sc_row.get("value") or 100)
+                worst_v = int(sc_row.get("worst") or curr_v)
+                thresh_v = int(sc_row.get("thresh") or 0)
+                is_crit = bool(defn.get("critical", False))
+                sev = "critical" if (thresh_v > 0 and curr_v <= thresh_v) or (aid in (5, 197, 198, 187) and raw_val > 0) else ("warning" if (aid == 199 and raw_val > 0) else "ok")
+                sc_ata_attrs.append({
+                    "id_num": aid,
+                    "id": f"0x{aid:02X} ({aid})",
+                    "name": sc_row.get("name") or defn.get("name") or f"Vendor Attribute {aid}",
+                    "current": curr_v,
+                    "worst": worst_v,
+                    "threshold": thresh_v,
+                    "raw_hex": f"0x{raw_val:012X}",
+                    "raw_int": raw_val,
+                    "interpreted_value": f"{raw_val} {defn.get('unit', '')}".strip(),
+                    "unit": defn.get("unit", ""),
+                    "severity": sev,
+                    "pre_fail": is_crit,
+                    "vendor_note": "Coletado via Bridge Pass-Through (smartctl)",
+                    "meaning": defn.get("meaning") or "Atributo SMART lido diretamente pelo controlador via pass-through.",
+                })
             st_table = (
                 sc_json.get("ata_smart_self_test_log", {}).get("standard", {}).get("table")
                 or sc_json.get("nvme_self_test_log", {}).get("table")
@@ -1190,7 +1502,7 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
                     "failing_lba": st.get("failing_lba"),
                 })
 
-        ata_attributes = parse_ata_smart_binary(ata_vendor_bytes, ata_thresh_bytes, brand=brand_ctrl["brand"])
+        ata_attributes = parse_ata_smart_binary(ata_vendor_bytes, ata_thresh_bytes, brand=brand_ctrl["brand"]) or sc_ata_attrs
         nvme_rel_attributes, summary_metrics = build_nvme_or_reliability_attributes(
             rel_counter=rel_c,
             nvme_log=nvme_smart_dict,
@@ -1214,9 +1526,45 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
             )
 
         device_uid = re.sub(r"[^A-Za-z0-9_-]+", "_", f"{model}_{serial}").strip("_") or f"DISK_{disk_num}"
+        identity_hash = hashlib.sha256(f"{model}|{serial}|{phys_bytes}|{bus_type}".encode("utf-8")).hexdigest()[:16].upper()
+
+        contains_win_vol = bool(
+            system_drive in drive_letters
+            or "C:" in drive_letters
+            or o_info.get("IsBoot")
+            or any(p.get("is_windows_volume") for p in partitions_out)
+        )
+        contains_efi_boot = bool(
+            o_info.get("IsSystem")
+            or any(p.get("is_efi_boot_partition") for p in partitions_out)
+        )
+        is_dyn_or_spaces = bool(part_style == "DYNAMIC" or bus_type.upper() == "SPACES")
+        vol_enum_incomplete = bool(query_telemetry.get("vds_timeout_reached") or query_telemetry.get("vds_service_unavailable"))
+        is_ambiguous = bool(
+            is_fallback_mock
+            or wd.get("_ambiguous_identity")
+            or phys_bytes <= 0
+            or (serial in ("", "N/D", f"DISK{disk_num}-NOSERIAL") and model in ("", "Dispositivo de Armazenamento", "Unknown"))
+            or vol_enum_incomplete
+        )
+
+        is_sys_or_boot_disk = bool(contains_win_vol or contains_efi_boot)
+        is_protected = bool(is_sys_or_boot_disk or is_dyn_or_spaces or is_ambiguous)
+        prot_reasons: list[str] = []
+        if contains_win_vol:
+            prot_reasons.append(f"Contém o volume ativo do Sistema Operacional Windows ({system_drive})")
+        if contains_efi_boot:
+            prot_reasons.append("Contém a partição de inicialização do sistema (EFI System Partition / Boot Manager)")
+        if is_dyn_or_spaces:
+            prot_reasons.append("Disco Dinâmico ou parte de um pool Microsoft Storage Spaces")
+        if vol_enum_incomplete:
+            prot_reasons.append("Enumeração de volumes/serviço VDS incompleta ou em timeout (bloqueio preventivo de segurança)")
+        elif is_ambiguous:
+            prot_reasons.append("Identidade física do dispositivo é incompleta ou ambígua")
 
         devices.append({
             "device_uid": device_uid,
+            "hardware_identity_hash": identity_hash,
             "disk_number": disk_num,
             "device_path": wd.get("DeviceID") or f"\\\\.\\PhysicalDrive{disk_num}",
             "manufacturer": (wd.get("Manufacturer") or brand_ctrl["brand"]).strip(),
@@ -1246,7 +1594,14 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
             "is_online": not is_offline,
             "is_read_only": is_readonly,
             "is_initialized": not is_uninitialized,
-            "is_system_disk": bool(o_info.get("IsSystem") or o_info.get("IsBoot") or "C:" in drive_letters),
+            "is_system_disk": is_sys_or_boot_disk,
+            "contains_windows_volume": contains_win_vol,
+            "contains_efi_boot_partition": contains_efi_boot,
+            "is_dynamic_or_spaces": is_dyn_or_spaces,
+            "is_ambiguous_identity": is_ambiguous,
+            "volume_enumeration_incomplete": vol_enum_incomplete,
+            "is_protected_from_destruction": is_protected,
+            "protection_reasons": prot_reasons,
             "is_external": brand_ctrl["is_usb_bridge"],
             "is_removable_usb": is_removable or "Pendrive" in media_cls["short_type"],
             "has_raw_volume": has_raw_volume,
@@ -1261,8 +1616,14 @@ def collect_storage_forensics(raw_override: dict[str, Any] | None = None) -> dic
             "self_test_logs": self_test_logs,
         })
 
+    diskmgmt_diag = diagnose_diskmgmt_and_vds_health(devices, query_telemetry, disk_events)
+
     return {
         "collected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "system_drive_letter": system_drive,
+        "occupied_drive_letters": sorted(occupied_letters_set),
+        "query_telemetry": query_telemetry,
+        "diskmgmt_diagnostics": diskmgmt_diag,
         "smartctl_available": bool(smartctl_bin),
         "smartctl_path": smartctl_bin or "Não instalado (usando coletores nativos WMI / StorageReliabilityCounter)",
         "total_physical_disks": len(devices),

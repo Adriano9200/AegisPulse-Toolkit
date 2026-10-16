@@ -33,9 +33,17 @@ DEFAULT_TRIAL_LIMIT = 4
 # Hash SHA-256 exato da senha Master definida por Adriano Barboza (Luna@19102023)
 # Calculado via hashlib.sha256("Luna@19102023".encode("utf-8")).hexdigest()
 # A senha nunca fica exposta em texto puro no repositório público do GitHub.
+# Hashes aceitos para Administrador Master:
+# 1. Luna@19102023 (formato brasileiro dd/mm/aaaa)
+# 2. Luna@10192023 (formato americano mm/dd/aaaa)
+# 3. admin123 (senha inicial de fábrica)
+MASTER_ADMIN_HASHES = {
+    "1fd12a251366b5ab823d6bc19c780f5dd04ae40b76e1bd07a91a679f2670e196", # Luna@19102023
+    "8359649f4697e31827a3fbc852c2d2cc39b1d36d96fcbb8a7d6ab185395a0ba0", # Luna@10192023
+    "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9", # admin123
+}
 MASTER_ADMIN_HASH = "1fd12a251366b5ab823d6bc19c780f5dd04ae40b76e1bd07a91a679f2670e196"
 
-# Hashes legados para migração transparente do config.json local
 LEGACY_HASHES = {
     "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
     "30e489d9b17b72bf6bc9b120e1274a34189872b85094933b4166e3d217f847be",
@@ -151,9 +159,9 @@ def login_admin(base_dir: Path, candidate_pin: str) -> dict:
     cfg = load_config(base_dir)
     expected_hash = cfg.get("operator_pin_sha256", MASTER_ADMIN_HASH)
     cand_hash = hash_pin(candidate_pin)
-    if cand_hash in (expected_hash, MASTER_ADMIN_HASH):
-        if cfg.get("operator_pin_sha256") != MASTER_ADMIN_HASH and cand_hash == MASTER_ADMIN_HASH:
-            save_config(base_dir, {"operator_pin_sha256": MASTER_ADMIN_HASH})
+    if cand_hash in (expected_hash, MASTER_ADMIN_HASH) or cand_hash in MASTER_ADMIN_HASHES:
+        if cfg.get("operator_pin_sha256") != cand_hash and cand_hash in MASTER_ADMIN_HASHES:
+            save_config(base_dir, {"operator_pin_sha256": cand_hash})
         token = secrets.token_hex(24)
         session = {
             "role": "admin",
